@@ -11,6 +11,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BiomeShop">
         <activity
+            android:name=".PanoramaActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BiomeShop" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
