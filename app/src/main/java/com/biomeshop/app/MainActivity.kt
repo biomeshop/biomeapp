@@ -20,8 +20,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,11 +31,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,8 +52,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -67,12 +71,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
-import com.biomeshop.app.data.AssetDownloader
 import com.biomeshop.app.data.Availability
+import com.biomeshop.app.data.BiomeAssetPrepareResult
+import com.biomeshop.app.data.BiomeAssetRepository
 import com.biomeshop.app.data.BiomeCatalogData
 import com.biomeshop.app.data.BiomeCatalogDefaults
 import com.biomeshop.app.data.BiomeCatalogRepository
 import com.biomeshop.app.data.BiomeItem
+import com.biomeshop.app.data.CachedBiomeAssets
 import com.biomeshop.app.data.FilterOption
 import com.biomeshop.app.data.PanoramaSpec
 import com.biomeshop.app.data.PriceOrder
@@ -85,6 +91,7 @@ import com.biomeshop.app.ui.theme.NightDeep
 import com.biomeshop.app.ui.theme.StatusLive
 import com.biomeshop.app.ui.theme.StatusSold
 import com.biomeshop.app.ui.theme.TextMuted
+import kotlinx.coroutines.launch
 
 private val statusOptions = listOf(
     FilterOption("all", "All status"),
@@ -120,27 +127,49 @@ private data class CatalogScreenState(
     val message: String? = null,
 )
 
+private data class GalleryViewerState(
+    val item: BiomeItem,
+    val images: List<String>,
+    val message: String?,
+)
+
 @Composable
 private fun BiomeShopApp() {
     val context = LocalContext.current
-    val repository = remember { BiomeCatalogRepository() }
-    val downloader = remember(context) { AssetDownloader(context.applicationContext) }
+    val scope = rememberCoroutineScope()
+    val repository = remember(context) { BiomeCatalogRepository(context.applicationContext) }
+    val assetRepository = remember(context) { BiomeAssetRepository(context.applicationContext) }
 
-    var screenState by remember {
-        mutableStateOf(CatalogScreenState())
-    }
+    var screenState by remember { mutableStateOf(CatalogScreenState()) }
+    var biomeAssets by remember { mutableStateOf<Map<String, CachedBiomeAssets>>(emptyMap()) }
     var biomeFilter by rememberSaveable { mutableStateOf("all") }
     var statusFilter by rememberSaveable { mutableStateOf("all") }
     var priceOrder by rememberSaveable { mutableStateOf(PriceOrder.Default) }
     var previewItem by remember { mutableStateOf<BiomeItem?>(null) }
+    var previewSyncMessage by remember { mutableStateOf<String?>(null) }
+    var isPreviewSyncing by remember { mutableStateOf(false) }
+    var galleryViewer by remember { mutableStateOf<GalleryViewerState?>(null) }
+    var refreshTick by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(repository) {
-        val result = repository.loadCatalog()
+    LaunchedEffect(repository, assetRepository, refreshTick) {
+        screenState = screenState.copy(isLoading = true, message = if (refreshTick == 0) screenState.message else "Refreshing live catalog...")
+        val result = repository.loadCatalog(forceRefresh = refreshTick > 0)
+        val caches = assetRepository.inspectCatalog(result.catalog)
+        biomeAssets = caches
         screenState = CatalogScreenState(
             catalog = result.catalog,
             isLoading = false,
-            message = result.message ?: "Live catalog loaded from GitHub.",
+            message = result.message,
         )
+    }
+
+    LaunchedEffect(previewItem?.id, previewItem?.revision) {
+        val item = previewItem ?: return@LaunchedEffect
+        isPreviewSyncing = true
+        val result = assetRepository.prepareBiomeAssets(item)
+        biomeAssets = biomeAssets + (item.id to result.cache)
+        previewSyncMessage = result.message
+        isPreviewSyncing = false
     }
 
     val catalog = screenState.catalog
@@ -162,17 +191,48 @@ private fun BiomeShopApp() {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
     }
 
-    fun openPanorama(title: String, panorama: PanoramaSpec?) {
+    fun prepareBiome(
+        item: BiomeItem,
+        onPrepared: (BiomeAssetPrepareResult) -> Unit,
+    ) {
+        scope.launch {
+            val result = assetRepository.prepareBiomeAssets(item)
+            biomeAssets = biomeAssets + (item.id to result.cache)
+            result.message?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+            onPrepared(result)
+        }
+    }
+
+    fun openPanorama(item: BiomeItem) {
+        val panorama = item.panorama
         if (panorama == null) {
             Toast.makeText(context, "No panorama available for this biome yet.", Toast.LENGTH_SHORT).show()
             return
         }
-        context.startActivity(PanoramaActivity.intent(context, title, panorama))
+
+        prepareBiome(item) { result ->
+            val resolved = panorama.copy(imageUrl = assetRepository.panoramaUrl(item, result.cache))
+            context.startActivity(PanoramaActivity.intent(context, item.name, resolved))
+        }
     }
 
-    fun queueDownloads() {
-        val count = downloader.enqueueCatalogAssets(catalog)
-        Toast.makeText(context, "Queued $count assets for download.", Toast.LENGTH_LONG).show()
+    fun openGallery(item: BiomeItem) {
+        prepareBiome(item) { result ->
+            val images = assetRepository.galleryModels(item, result.cache)
+            if (images.isEmpty()) {
+                Toast.makeText(context, "No gallery files are available for this biome yet.", Toast.LENGTH_SHORT).show()
+            } else {
+                galleryViewer = GalleryViewerState(
+                    item = item,
+                    images = images,
+                    message = result.message,
+                )
+            }
+        }
+    }
+
+    fun refreshCatalog() {
+        refreshTick += 1
     }
 
     Scaffold(containerColor = Night) { innerPadding ->
@@ -189,15 +249,19 @@ private fun BiomeShopApp() {
                     isLoading = screenState.isLoading,
                     message = screenState.message,
                     onOpenUrl = ::openUrl,
-                    onOpenPanorama = ::openPanorama,
-                    onDownloadAll = ::queueDownloads,
+                    onOpenPanorama = { openPanorama(featured) },
+                    onRefreshCatalog = ::refreshCatalog,
                 )
             }
             item {
                 FeaturedCard(
                     item = featured,
-                    onPreview = { previewItem = it },
-                    onOpenGallery = { openUrl(catalog.galleryUrl(it.id)) },
+                    imageModel = assetRepository.previewModel(featured, biomeAssets[featured.id]),
+                    onPreview = {
+                        previewSyncMessage = null
+                        previewItem = it
+                    },
+                    onOpenGallery = ::openGallery,
                     onOpenPanorama = ::openPanorama,
                 )
             }
@@ -227,8 +291,13 @@ private fun BiomeShopApp() {
             items(visibleItems, key = { it.id }) { item ->
                 InventoryCard(
                     item = item,
-                    onPreview = { previewItem = it },
-                    onOpenGallery = { openUrl(catalog.galleryUrl(it.id)) },
+                    imageModel = assetRepository.previewModel(item, biomeAssets[item.id]),
+                    cache = biomeAssets[item.id],
+                    onPreview = {
+                        previewSyncMessage = null
+                        previewItem = it
+                    },
+                    onOpenGallery = ::openGallery,
                     onOpenPanorama = ::openPanorama,
                 )
             }
@@ -236,11 +305,28 @@ private fun BiomeShopApp() {
     }
 
     previewItem?.let { item ->
+        val cache = biomeAssets[item.id]
         PreviewDialog(
             item = item,
-            onDismiss = { previewItem = null },
-            onOpenBrowser = { openUrl(catalog.galleryUrl(item.id)) },
-            onOpenPanorama = { openPanorama(item.name, item.panorama) },
+            imageModel = assetRepository.previewModel(item, cache),
+            cache = cache,
+            isSyncing = isPreviewSyncing,
+            syncMessage = previewSyncMessage,
+            onDismiss = {
+                previewItem = null
+                previewSyncMessage = null
+            },
+            onOpenGallery = { openGallery(item) },
+            onOpenPanorama = { openPanorama(item) },
+        )
+    }
+
+    galleryViewer?.let { viewer ->
+        GalleryDialog(
+            title = viewer.item.name,
+            images = viewer.images,
+            message = viewer.message,
+            onDismiss = { galleryViewer = null },
         )
     }
 }
@@ -274,8 +360,8 @@ private fun HeroCard(
     isLoading: Boolean,
     message: String?,
     onOpenUrl: (String) -> Unit,
-    onOpenPanorama: (String, PanoramaSpec?) -> Unit,
-    onDownloadAll: () -> Unit,
+    onOpenPanorama: () -> Unit,
+    onRefreshCatalog: () -> Unit,
 ) {
     Card(
         shape = RoundedCornerShape(28.dp),
@@ -316,14 +402,14 @@ private fun HeroCard(
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Text(
-                    text = "Live catalog, panorama launch, and download support are wired in. Visit /pw biomeshop in-game.",
+                    text = "This app now checks the tiny version file first, caches biome metadata locally, and downloads each biome's files only when that biome is opened.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = TextMuted,
                 )
 
                 AssistChip(
                     onClick = { },
-                    label = { Text(if (isLoading) "Loading live data..." else catalog.dataSourceLabel) },
+                    label = { Text(if (isLoading) "Checking home repo..." else catalog.dataSourceLabel) },
                     colors = AssistChipDefaults.assistChipColors(
                         containerColor = Color(0x33201A38),
                         labelColor = MaterialTheme.colorScheme.onBackground,
@@ -343,7 +429,7 @@ private fun HeroCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    listOf("Natural Generated", "Remote JSON", "360 Panorama", "Download Assets").forEach { pill ->
+                    listOf("Home JSON contract", "Revision-aware cache", "Offline gallery", "Lazy biome downloads").forEach { pill ->
                         AssistChip(
                             onClick = { },
                             label = { Text(pill) },
@@ -359,9 +445,9 @@ private fun HeroCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    StatBox("Owner", catalog.ownerName)
+                    StatBox("Source", catalog.sourceOfTruth)
                     StatBox("Biomes", catalog.items.size.toString())
-                    StatBox("Mode", "360")
+                    StatBox("Mode", "Offline ready")
                 }
 
                 @OptIn(ExperimentalLayoutApi::class)
@@ -374,11 +460,13 @@ private fun HeroCard(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Open site")
                     }
-                    OutlinedButton(onClick = { onOpenPanorama("BiomeShop Main Panorama", catalog.mainPanorama) }) {
-                        Text("Open 360")
+                    OutlinedButton(onClick = onOpenPanorama) {
+                        Text("Open featured 360")
                     }
-                    OutlinedButton(onClick = onDownloadAll) {
-                        Text("Download assets")
+                    OutlinedButton(onClick = onRefreshCatalog) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Refresh catalog")
                     }
                 }
             }
@@ -406,9 +494,10 @@ private fun RowScope.StatBox(label: String, value: String) {
 @Composable
 private fun FeaturedCard(
     item: BiomeItem,
+    imageModel: String,
     onPreview: (BiomeItem) -> Unit,
     onOpenGallery: (BiomeItem) -> Unit,
-    onOpenPanorama: (String, PanoramaSpec?) -> Unit,
+    onOpenPanorama: (BiomeItem) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -424,7 +513,7 @@ private fun FeaturedCard(
                 style = MaterialTheme.typography.labelLarge,
                 color = AccentGold,
             )
-            RemoteBiomeImage(item = item, height = 220.dp)
+            RemoteBiomeImage(imageModel = imageModel, contentDescription = item.name, height = 220.dp)
             TypeChipRow(item.types)
             Text(text = item.name, style = MaterialTheme.typography.headlineMedium)
             Text(text = item.description, style = MaterialTheme.typography.bodyLarge, color = TextMuted)
@@ -444,13 +533,13 @@ private fun FeaturedCard(
                 Button(onClick = { onPreview(item) }) {
                     Icon(Icons.Default.Image, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Preview")
+                    Text("Details")
                 }
-                OutlinedButton(onClick = { onOpenPanorama(item.name, item.panorama) }) {
+                OutlinedButton(onClick = { onOpenPanorama(item) }) {
                     Text("360 View")
                 }
                 OutlinedButton(onClick = { onOpenGallery(item) }) {
-                    Icon(Icons.Default.Language, contentDescription = null)
+                    Icon(Icons.Default.Image, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Gallery")
                 }
@@ -567,9 +656,11 @@ private fun DropdownSelector(
 @Composable
 private fun InventoryCard(
     item: BiomeItem,
+    imageModel: String,
+    cache: CachedBiomeAssets?,
     onPreview: (BiomeItem) -> Unit,
     onOpenGallery: (BiomeItem) -> Unit,
-    onOpenPanorama: (String, PanoramaSpec?) -> Unit,
+    onOpenPanorama: (BiomeItem) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -582,7 +673,7 @@ private fun InventoryCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            RemoteBiomeImage(item = item, height = 190.dp)
+            RemoteBiomeImage(imageModel = imageModel, contentDescription = item.name, height = 190.dp)
             TypeChipRow(item.types)
             Text(text = item.name, style = MaterialTheme.typography.titleLarge)
             Text(
@@ -600,15 +691,26 @@ private fun InventoryCard(
                 PriceText(item.priceLabel)
                 StatusChip(item.status)
             }
+            cache?.takeIf { it.hasAnyLocalFiles }?.let {
+                Text(
+                    text = if (it.isCurrent) {
+                        "Offline files ready"
+                    } else {
+                        "Older offline files available"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AccentGold,
+                )
+            }
             @OptIn(ExperimentalLayoutApi::class)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedButton(onClick = { onPreview(item) }) {
-                    Text("Preview")
+                    Text("Details")
                 }
-                OutlinedButton(onClick = { onOpenPanorama(item.name, item.panorama) }) {
+                OutlinedButton(onClick = { onOpenPanorama(item) }) {
                     Text("360 View")
                 }
                 TextButton(onClick = { onOpenGallery(item) }) {
@@ -638,10 +740,14 @@ private fun TypeChipRow(types: List<String>) {
 }
 
 @Composable
-private fun RemoteBiomeImage(item: BiomeItem, height: Dp) {
+private fun RemoteBiomeImage(
+    imageModel: String,
+    contentDescription: String,
+    height: Dp,
+) {
     AsyncImage(
-        model = item.imageUrl,
-        contentDescription = item.name,
+        model = imageModel,
+        contentDescription = contentDescription,
         contentScale = ContentScale.Crop,
         modifier = Modifier
             .fillMaxWidth()
@@ -682,8 +788,12 @@ private fun StatusChip(status: Availability) {
 @Composable
 private fun PreviewDialog(
     item: BiomeItem,
+    imageModel: String,
+    cache: CachedBiomeAssets?,
+    isSyncing: Boolean,
+    syncMessage: String?,
     onDismiss: () -> Unit,
-    onOpenBrowser: () -> Unit,
+    onOpenGallery: () -> Unit,
     onOpenPanorama: () -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -697,7 +807,7 @@ private fun PreviewDialog(
             ) {
                 Text(text = item.name, style = MaterialTheme.typography.titleLarge)
                 AsyncImage(
-                    model = item.imageUrl,
+                    model = imageModel,
                     contentDescription = item.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -706,10 +816,33 @@ private fun PreviewDialog(
                         .clip(RoundedCornerShape(20.dp)),
                 )
                 Text(
-                    text = "This screen uses the live catalog image. You can jump into the 360 panorama or open the original gallery page from here.",
+                    text = "Opening this biome prepares offline files using its revision from the home repo. If a newer revision exists, the app downloads only this biome's files.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextMuted,
                 )
+                if (isSyncing) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.width(18.dp), strokeWidth = 2.dp)
+                        Text("Checking offline files...", color = AccentGold)
+                    }
+                }
+                cache?.takeIf { it.hasAnyLocalFiles }?.let {
+                    Text(
+                        text = if (it.isCurrent) "Offline assets match revision ${item.revision}." else "Offline assets are older than revision ${item.revision}.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AccentGold,
+                    )
+                }
+                syncMessage?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AccentGold,
+                    )
+                }
                 @OptIn(ExperimentalLayoutApi::class)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -718,12 +851,56 @@ private fun PreviewDialog(
                     Button(onClick = onOpenPanorama) {
                         Text("Open 360")
                     }
-                    OutlinedButton(onClick = onOpenBrowser) {
+                    OutlinedButton(onClick = onOpenGallery) {
                         Text("Open gallery")
                     }
                     OutlinedButton(onClick = onDismiss) {
                         Text("Close")
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GalleryDialog(
+    title: String,
+    images: List<String>,
+    message: String?,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF120E1D)),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(text = title, style = MaterialTheme.typography.titleLarge)
+                message?.let {
+                    Text(text = it, style = MaterialTheme.typography.bodyMedium, color = AccentGold)
+                }
+                LazyColumn(
+                    modifier = Modifier.height(420.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(images) { image ->
+                        AsyncImage(
+                            model = image,
+                            contentDescription = title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .clip(RoundedCornerShape(18.dp)),
+                        )
+                    }
+                }
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                    Text("Close")
                 }
             }
         }

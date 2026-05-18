@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>BiomeShop Panorama</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/core@5.14.1/index.css" />
+    <link rel="stylesheet" href="vendor/pannellum.css" />
     <style>
       :root {
         color-scheme: dark;
@@ -50,6 +50,7 @@
       #viewer {
         width: 100%;
         height: calc(100vh - 72px);
+        background: #090612;
       }
     </style>
   </head>
@@ -62,9 +63,8 @@
       <div id="viewer"></div>
     </div>
 
-    <script type="module">
-      import { Viewer } from 'https://cdn.jsdelivr.net/npm/@photo-sphere-viewer/core@5.14.1/+esm';
-
+    <script src="vendor/pannellum.js"></script>
+    <script>
       const params = new URLSearchParams(window.location.search);
       const title = params.get('title') || 'BiomeShop 360';
       const imageUrl = params.get('imageUrl');
@@ -77,31 +77,28 @@
 
       document.getElementById('title').textContent = title;
 
-      const panoData = fullWidth > 0 ? {
-        fullWidth,
-        fullHeight,
-        croppedWidth,
-        croppedHeight,
-        croppedX,
-        croppedY,
-      } : undefined;
-
-      new Viewer({
-        container: document.getElementById('viewer'),
+      const config = {
+        type: 'equirectangular',
         panorama: imageUrl,
-        panoData,
-        defaultYaw: '0deg',
-        defaultPitch: '0deg',
-        defaultZoomLvl: 32,
-        mousemove: true,
-        mousewheel: true,
-        moveInertia: true,
-        moveSpeed: 0.55,
-        zoomSpeed: 0.5,
-        navbar: ['zoom', 'move', 'fullscreen'],
-        touchmoveTwoFingers: false,
-        keyboard: false,
-      });
+        autoLoad: true,
+        showControls: true,
+        showFullscreenCtrl: false,
+        mouseZoom: true,
+        draggable: true,
+        compass: false,
+        hfov: 110,
+        pitch: 0,
+        yaw: 0,
+        ignoreGPanoXMP: true,
+      };
+
+      if (fullWidth > 0 && fullHeight > 0 && croppedWidth > 0 && croppedHeight > 0) {
+        config.haov = (croppedWidth / fullWidth) * 360;
+        config.vaov = (croppedHeight / fullHeight) * 180;
+        config.vOffset = 90 - (((croppedY + (croppedHeight / 2)) / fullHeight) * 180);
+      }
+
+      pannellum.viewer('viewer', config);
     </script>
   </body>
 </html>

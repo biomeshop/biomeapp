@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
+import android.webkit.MimeTypeMap
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -15,6 +16,8 @@ import androidx.activity.ComponentActivity
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import com.biomeshop.app.data.PanoramaSpec
+import java.io.File
+import java.io.FileInputStream
 
 class PanoramaActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
@@ -25,6 +28,7 @@ class PanoramaActivity : ComponentActivity() {
 
         val assetLoader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .addPathHandler("/cache/", InternalStoragePathHandler(File(filesDir, "biome-cache")))
             .build()
 
         val webView = WebView(this).apply {
@@ -90,5 +94,23 @@ class PanoramaActivity : ComponentActivity() {
             putExtra(EXTRA_CROPPED_X, panorama.croppedX)
             putExtra(EXTRA_CROPPED_Y, panorama.croppedY)
         }
+    }
+}
+
+private class InternalStoragePathHandler(
+    private val root: File,
+) : WebViewAssetLoader.PathHandler {
+    override fun handle(path: String): WebResourceResponse? {
+        val relativePath = path.removePrefix("/")
+        val target = File(root, relativePath)
+        if (!target.exists() || !target.isFile) return null
+
+        val extension = target.extension.lowercase()
+        val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "application/octet-stream"
+        return WebResourceResponse(
+            mimeType,
+            null,
+            FileInputStream(target),
+        )
     }
 }
