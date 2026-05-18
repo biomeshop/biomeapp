@@ -1,11 +1,24 @@
 package com.biomeshop.app
 
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,28 +33,30 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -49,6 +64,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -59,6 +75,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -68,7 +85,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.biomeshop.app.data.Availability
 import com.biomeshop.app.data.BiomeAssetPrepareResult
@@ -79,7 +95,6 @@ import com.biomeshop.app.data.BiomeCatalogRepository
 import com.biomeshop.app.data.BiomeItem
 import com.biomeshop.app.data.CachedBiomeAssets
 import com.biomeshop.app.data.FilterOption
-import com.biomeshop.app.data.PanoramaSpec
 import com.biomeshop.app.data.PriceOrder
 import com.biomeshop.app.ui.theme.AccentCyan
 import com.biomeshop.app.ui.theme.AccentGold
@@ -90,6 +105,7 @@ import com.biomeshop.app.ui.theme.NightDeep
 import com.biomeshop.app.ui.theme.StatusLive
 import com.biomeshop.app.ui.theme.StatusSold
 import com.biomeshop.app.ui.theme.TextMuted
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val statusOptions = listOf(
@@ -123,14 +139,23 @@ class MainActivity : ComponentActivity() {
 private data class CatalogScreenState(
     val catalog: BiomeCatalogData = BiomeCatalogDefaults.data,
     val isLoading: Boolean = true,
-    val message: String? = null,
 )
 
 private data class GalleryViewerState(
     val item: BiomeItem,
     val images: List<String>,
-    val message: String?,
+    val showOfflinePlaceholder: Boolean,
 )
+
+private data class ConnectivityBanner(
+    val text: String,
+    val online: Boolean,
+)
+
+private enum class MenuScreen {
+    QuickMenu,
+    Settings,
+}
 
 @Composable
 private fun BiomeShopApp() {
@@ -138,6 +163,7 @@ private fun BiomeShopApp() {
     val scope = rememberCoroutineScope()
     val repository = remember(context) { BiomeCatalogRepository(context.applicationContext) }
     val assetRepository = remember(context) { BiomeAssetRepository(context.applicationContext) }
+    val isOnline = rememberConnectivityState()
 
     var screenState by remember { mutableStateOf(CatalogScreenState()) }
     var biomeAssets by remember { mutableStateOf<Map<String, CachedBiomeAssets>>(emptyMap()) }
@@ -145,30 +171,37 @@ private fun BiomeShopApp() {
     var statusFilter by rememberSaveable { mutableStateOf("all") }
     var priceOrder by rememberSaveable { mutableStateOf(PriceOrder.Default) }
     var previewItem by remember { mutableStateOf<BiomeItem?>(null) }
-    var previewSyncMessage by remember { mutableStateOf<String?>(null) }
-    var isPreviewSyncing by remember { mutableStateOf(false) }
+    var previewSyncingId by remember { mutableStateOf<String?>(null) }
     var galleryViewer by remember { mutableStateOf<GalleryViewerState?>(null) }
     var refreshTick by remember { mutableIntStateOf(0) }
+    var activeMenuScreen by remember { mutableStateOf<MenuScreen?>(null) }
+    var banner by remember { mutableStateOf<ConnectivityBanner?>(null) }
+    var knownConnectivity by remember { mutableStateOf<Boolean?>(null) }
 
     LaunchedEffect(repository, assetRepository, refreshTick) {
-        screenState = screenState.copy(isLoading = true, message = if (refreshTick == 0) screenState.message else "Refreshing live catalog...")
+        screenState = screenState.copy(isLoading = true)
         val result = repository.loadCatalog(forceRefresh = refreshTick > 0)
-        val caches = assetRepository.inspectCatalog(result.catalog)
-        biomeAssets = caches
+        biomeAssets = assetRepository.inspectCatalog(result.catalog)
         screenState = CatalogScreenState(
             catalog = result.catalog,
             isLoading = false,
-            message = result.message,
         )
     }
 
-    LaunchedEffect(previewItem?.id, previewItem?.revision) {
-        val item = previewItem ?: return@LaunchedEffect
-        isPreviewSyncing = true
-        val result = assetRepository.prepareBiomeAssets(item)
-        biomeAssets = biomeAssets + (item.id to result.cache)
-        previewSyncMessage = result.message
-        isPreviewSyncing = false
+    LaunchedEffect(isOnline) {
+        if (knownConnectivity == null) {
+            knownConnectivity = isOnline
+            return@LaunchedEffect
+        }
+        if (knownConnectivity != isOnline) {
+            knownConnectivity = isOnline
+            banner = ConnectivityBanner(
+                text = if (isOnline) "Now online" else "Currently offline",
+                online = isOnline,
+            )
+            delay(3000)
+            banner = null
+        }
     }
 
     val catalog = screenState.catalog
@@ -185,6 +218,9 @@ private fun BiomeShopApp() {
             priceOrder = priceOrder,
         )
     }
+    val availableCount = remember(catalog) {
+        catalog.items.count { it.status == Availability.Available }
+    }
 
     fun openUrl(url: String) {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -197,7 +233,6 @@ private fun BiomeShopApp() {
         scope.launch {
             val result = assetRepository.prepareBiomeAssets(item)
             biomeAssets = biomeAssets + (item.id to result.cache)
-            result.message?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
             onPrepared(result)
         }
     }
@@ -216,117 +251,180 @@ private fun BiomeShopApp() {
     }
 
     fun openGallery(item: BiomeItem) {
+        val currentCache = biomeAssets[item.id]
+        if (!isOnline && currentCache?.galleryFiles.isNullOrEmpty()) {
+            galleryViewer = GalleryViewerState(
+                item = item,
+                images = emptyList(),
+                showOfflinePlaceholder = true,
+            )
+            return
+        }
+
         prepareBiome(item) { result ->
             val images = assetRepository.galleryModels(item, result.cache)
-            if (images.isEmpty()) {
-                Toast.makeText(context, "No gallery files are available for this biome yet.", Toast.LENGTH_SHORT).show()
-            } else {
-                galleryViewer = GalleryViewerState(
-                    item = item,
-                    images = images,
-                    message = result.message,
-                )
-            }
+            galleryViewer = GalleryViewerState(
+                item = item,
+                images = images,
+                showOfflinePlaceholder = !isOnline && images.isEmpty(),
+            )
         }
     }
 
     fun refreshCatalog() {
         refreshTick += 1
+        activeMenuScreen = null
     }
 
-    Scaffold(containerColor = Night) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            item {
-                HeroCard(
-                    catalog = catalog,
-                    isLoading = screenState.isLoading,
-                    message = screenState.message,
-                    onOpenUrl = ::openUrl,
-                    onOpenPanorama = { openPanorama(featured) },
-                    onRefreshCatalog = ::refreshCatalog,
-                )
-            }
-            item {
-                FeaturedCard(
-                    item = featured,
-                    imageModel = assetRepository.previewModel(featured, biomeAssets[featured.id]),
-                    onPreview = {
-                        previewSyncMessage = null
-                        previewItem = it
-                    },
-                    onOpenGallery = ::openGallery,
-                    onOpenPanorama = ::openPanorama,
-                )
-            }
-            item {
-                FilterSection(
-                    biomeOptions = catalog.biomeOptions,
-                    biomeFilter = biomeFilter,
-                    statusFilter = statusFilter,
-                    priceOrder = priceOrder,
-                    onBiomeChange = { biomeFilter = it },
-                    onStatusChange = { statusFilter = it },
-                    onPriceChange = { priceOrder = it },
-                    onReset = {
-                        biomeFilter = "all"
-                        statusFilter = "all"
-                        priceOrder = PriceOrder.Default
-                    },
-                )
-            }
-            item {
-                Text(
-                    text = "${visibleItems.size} biomes",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = AccentGold,
-                )
-            }
-            items(visibleItems, key = { it.id }) { item ->
-                InventoryCard(
-                    item = item,
-                    imageModel = assetRepository.previewModel(item, biomeAssets[item.id]),
-                    cache = biomeAssets[item.id],
-                    onPreview = {
-                        previewSyncMessage = null
-                        previewItem = it
-                    },
-                    onOpenGallery = ::openGallery,
-                    onOpenPanorama = ::openPanorama,
-                )
-            }
+    fun clearDownloadedImages() {
+        scope.launch {
+            assetRepository.clearDownloadedBiomes()
+            biomeAssets = assetRepository.inspectCatalog(screenState.catalog)
+            galleryViewer = null
+            previewItem = null
+            Toast.makeText(context, "Downloaded biome images cleared.", Toast.LENGTH_SHORT).show()
         }
     }
 
-    previewItem?.let { item ->
-        val cache = biomeAssets[item.id]
-        PreviewDialog(
-            item = item,
-            imageModel = assetRepository.previewModel(item, cache),
-            cache = cache,
-            isSyncing = isPreviewSyncing,
-            syncMessage = previewSyncMessage,
-            onDismiss = {
-                previewItem = null
-                previewSyncMessage = null
-            },
-            onOpenGallery = { openGallery(item) },
-            onOpenPanorama = { openPanorama(item) },
-        )
+    fun clearAllData() {
+        scope.launch {
+            assetRepository.clearAllCache()
+            repository.clearMetadataCache()
+            biomeAssets = emptyMap()
+            galleryViewer = null
+            previewItem = null
+            refreshTick += 1
+            activeMenuScreen = null
+            Toast.makeText(context, "Catalog data and downloaded images cleared.", Toast.LENGTH_SHORT).show()
+        }
     }
 
-    galleryViewer?.let { viewer ->
-        GalleryDialog(
-            title = viewer.item.name,
-            images = viewer.images,
-            message = viewer.message,
-            onDismiss = { galleryViewer = null },
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(containerColor = Night) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                item {
+                    HeroCard(
+                        catalog = catalog,
+                        isLoading = screenState.isLoading,
+                        biomeCount = catalog.items.size,
+                        availableCount = availableCount,
+                        onOpenUrl = ::openUrl,
+                        onOpenMenu = { activeMenuScreen = MenuScreen.QuickMenu },
+                    )
+                }
+                item {
+                    FeaturedCard(
+                        item = featured,
+                        imageModel = assetRepository.previewModel(featured, biomeAssets[featured.id]),
+                        onPreview = {
+                            previewItem = it
+                            previewSyncingId = it.id
+                        },
+                        onOpenGallery = ::openGallery,
+                        onOpenPanorama = ::openPanorama,
+                    )
+                }
+                item {
+                    FilterSection(
+                        biomeOptions = catalog.biomeOptions,
+                        biomeFilter = biomeFilter,
+                        statusFilter = statusFilter,
+                        priceOrder = priceOrder,
+                        onBiomeChange = { biomeFilter = it },
+                        onStatusChange = { statusFilter = it },
+                        onPriceChange = { priceOrder = it },
+                        onReset = {
+                            biomeFilter = "all"
+                            statusFilter = "all"
+                            priceOrder = PriceOrder.Default
+                        },
+                    )
+                }
+                item {
+                    Text(
+                        text = "${visibleItems.size} biomes",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = AccentGold,
+                    )
+                }
+                items(visibleItems, key = { it.id }) { item ->
+                    InventoryCard(
+                        item = item,
+                        imageModel = assetRepository.previewModel(item, biomeAssets[item.id]),
+                        onPreview = {
+                            previewItem = it
+                            previewSyncingId = it.id
+                        },
+                        onOpenGallery = ::openGallery,
+                        onOpenPanorama = ::openPanorama,
+                    )
+                }
+            }
+        }
+
+        ConnectivityStatusBanner(
+            banner = banner,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 18.dp),
         )
+
+        previewItem?.let { item ->
+            PreviewScreen(
+                item = item,
+                imageModel = assetRepository.previewModel(item, biomeAssets[item.id]),
+                isSyncing = previewSyncingId == item.id,
+                onDismiss = {
+                    previewItem = null
+                    previewSyncingId = null
+                },
+                onOpenGallery = { openGallery(item) },
+                onOpenPanorama = { openPanorama(item) },
+            )
+        }
+
+        galleryViewer?.let { viewer ->
+            GalleryScreen(
+                title = viewer.item.name,
+                images = viewer.images,
+                showOfflinePlaceholder = viewer.showOfflinePlaceholder,
+                isOnline = isOnline,
+                onDismiss = { galleryViewer = null },
+            )
+        }
+
+        when (activeMenuScreen) {
+            MenuScreen.QuickMenu -> {
+                QuickMenuOverlay(
+                    onDismiss = { activeMenuScreen = null },
+                    onOpenSettings = { activeMenuScreen = MenuScreen.Settings },
+                )
+            }
+            MenuScreen.Settings -> {
+                SettingsScreen(
+                    onDismiss = { activeMenuScreen = null },
+                    onRefreshCatalog = ::refreshCatalog,
+                    onClearCache = ::clearDownloadedImages,
+                    onClearData = ::clearAllData,
+                )
+            }
+            null -> Unit
+        }
+    }
+
+    LaunchedEffect(previewItem?.id, previewItem?.revision) {
+        val item = previewItem ?: return@LaunchedEffect
+        val result = assetRepository.prepareBiomeAssets(item)
+        biomeAssets = biomeAssets + (item.id to result.cache)
+        if (previewSyncingId == item.id) {
+            previewSyncingId = null
+        }
     }
 }
 
@@ -357,10 +455,10 @@ private fun filterAndSortBiomes(
 private fun HeroCard(
     catalog: BiomeCatalogData,
     isLoading: Boolean,
-    message: String?,
+    biomeCount: Int,
+    availableCount: Int,
     onOpenUrl: (String) -> Unit,
-    onOpenPanorama: () -> Unit,
-    onRefreshCatalog: () -> Unit,
+    onOpenMenu: () -> Unit,
 ) {
     Card(
         shape = RoundedCornerShape(28.dp),
@@ -388,8 +486,22 @@ private fun HeroCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    IconButton(
+                        onClick = onOpenMenu,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color(0x44140F20)),
+                    ) {
+                        Icon(Icons.Default.Home, contentDescription = "Home menu", tint = AccentGold)
+                    }
+                }
+
                 Text(
                     text = "NUMBER ONE PREMIUM SHOP OF BIOMES",
                     style = MaterialTheme.typography.labelLarge,
@@ -401,72 +513,27 @@ private fun HeroCard(
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Text(
-                    text = "This app now checks the tiny version file first, caches biome metadata locally, and downloads each biome's files only when that biome is opened.",
+                    text = if (isLoading) {
+                        "Checking for changes from the live biome catalog."
+                    } else {
+                        "Browse, inspect, and download biome details with a smoother offline-first flow."
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                     color = TextMuted,
                 )
-
-                AssistChip(
-                    onClick = { },
-                    label = { Text(if (isLoading) "Checking home repo..." else catalog.dataSourceLabel) },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = Color(0x33201A38),
-                        labelColor = MaterialTheme.colorScheme.onBackground,
-                    ),
-                )
-
-                message?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AccentGold,
-                    )
-                }
-
-                @OptIn(ExperimentalLayoutApi::class)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    listOf("Home JSON contract", "Revision-aware cache", "Offline gallery", "Lazy biome downloads").forEach { pill ->
-                        AssistChip(
-                            onClick = { },
-                            label = { Text(pill) },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = Color(0x33201A38),
-                                labelColor = MaterialTheme.colorScheme.onBackground,
-                            ),
-                        )
-                    }
-                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    StatBox("Source", catalog.sourceOfTruth)
-                    StatBox("Biomes", catalog.items.size.toString())
-                    StatBox("Mode", "Offline ready")
+                    StatBox("Biomes", if (biomeCount >= 10) "10+" else biomeCount.toString(), AccentGold)
+                    StatBox("Available", availableCount.toString(), StatusLive)
                 }
 
-                @OptIn(ExperimentalLayoutApi::class)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Button(onClick = { onOpenUrl(catalog.siteUrl) }) {
-                        Icon(Icons.Default.Language, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Open site")
-                    }
-                    OutlinedButton(onClick = onOpenPanorama) {
-                        Text("Open featured 360")
-                    }
-                    OutlinedButton(onClick = onRefreshCatalog) {
-                        Icon(Icons.Default.Refresh, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Refresh catalog")
-                    }
+                Button(onClick = { onOpenUrl(catalog.siteUrl) }) {
+                    Icon(Icons.Default.Language, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Open site")
                 }
             }
         }
@@ -474,7 +541,7 @@ private fun HeroCard(
 }
 
 @Composable
-private fun RowScope.StatBox(label: String, value: String) {
+private fun RowScope.StatBox(label: String, value: String, accent: Color) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x55201836)),
         shape = RoundedCornerShape(18.dp),
@@ -485,7 +552,7 @@ private fun RowScope.StatBox(label: String, value: String) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(text = label.uppercase(), style = MaterialTheme.typography.labelLarge, color = AccentPink)
-            Text(text = value, style = MaterialTheme.typography.titleLarge, color = AccentGold)
+            Text(text = value, style = MaterialTheme.typography.titleLarge, color = accent)
         }
     }
 }
@@ -656,7 +723,6 @@ private fun DropdownSelector(
 private fun InventoryCard(
     item: BiomeItem,
     imageModel: String,
-    cache: CachedBiomeAssets?,
     onPreview: (BiomeItem) -> Unit,
     onOpenGallery: (BiomeItem) -> Unit,
     onOpenPanorama: (BiomeItem) -> Unit,
@@ -689,17 +755,6 @@ private fun InventoryCard(
             ) {
                 PriceText(item.priceLabel)
                 StatusChip(item.status)
-            }
-            cache?.takeIf { it.hasAnyLocalFiles }?.let {
-                Text(
-                    text = if (it.isCurrent) {
-                        "Offline files ready"
-                    } else {
-                        "Older offline files available"
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                    color = AccentGold,
-                )
             }
             @OptIn(ExperimentalLayoutApi::class)
             FlowRow(
@@ -785,77 +840,108 @@ private fun StatusChip(status: Availability) {
 }
 
 @Composable
-private fun PreviewDialog(
+private fun ConnectivityStatusBanner(
+    banner: ConnectivityBanner?,
+    modifier: Modifier = Modifier,
+) {
+    val visible = banner != null
+    val offsetY by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (visible) 0.dp else (-72).dp,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
+        label = "bannerOffset",
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "bannerAlpha",
+    )
+
+    if (banner != null || alpha > 0.01f) {
+        Row(
+            modifier = modifier
+                .offset(y = offsetY)
+                .clip(RoundedCornerShape(22.dp))
+                .background(if (banner?.online == true) StatusLive.copy(alpha = 0.22f) else StatusSold.copy(alpha = 0.22f))
+                .padding(horizontal = 18.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.Check,
+                contentDescription = null,
+                tint = if (banner?.online == true) StatusLive else StatusSold,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = banner?.text.orEmpty(),
+                color = if (banner?.online == true) StatusLive else StatusSold,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.alpha(alpha),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PreviewScreen(
     item: BiomeItem,
     imageModel: String,
-    cache: CachedBiomeAssets?,
     isSyncing: Boolean,
-    syncMessage: String?,
     onDismiss: () -> Unit,
     onOpenGallery: () -> Unit,
     onOpenPanorama: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF120E1D)),
+    FullScreenModal(onDismiss = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(text = item.name, style = MaterialTheme.typography.titleLarge)
+            ModalTopBar(title = item.name, onDismiss = onDismiss)
+            Box {
                 AsyncImage(
                     model = imageModel,
                     contentDescription = item.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(260.dp)
-                        .clip(RoundedCornerShape(20.dp)),
-                )
-                Text(
-                    text = "Opening this biome prepares offline files using its revision from the home repo. If a newer revision exists, the app downloads only this biome's files.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextMuted,
+                        .height(320.dp)
+                        .clip(RoundedCornerShape(24.dp)),
                 )
                 if (isSyncing) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.width(18.dp), strokeWidth = 2.dp)
-                        Text("Checking offline files...", color = AccentGold)
-                    }
-                }
-                cache?.takeIf { it.hasAnyLocalFiles }?.let {
-                    Text(
-                        text = if (it.isCurrent) "Offline assets match revision ${item.revision}." else "Offline assets are older than revision ${item.revision}.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AccentGold,
+                    SkeletonImage(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(320.dp)
+                            .clip(RoundedCornerShape(24.dp)),
                     )
                 }
-                syncMessage?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AccentGold,
-                    )
+            }
+            TypeChipRow(item.types)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PriceText(item.priceLabel)
+                StatusChip(item.status)
+            }
+            Text(
+                text = item.description,
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextMuted,
+            )
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(onClick = onOpenPanorama) {
+                    Text("Open 360")
                 }
-                @OptIn(ExperimentalLayoutApi::class)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Button(onClick = onOpenPanorama) {
-                        Text("Open 360")
-                    }
-                    OutlinedButton(onClick = onOpenGallery) {
-                        Text("Open gallery")
-                    }
-                    OutlinedButton(onClick = onDismiss) {
-                        Text("Close")
-                    }
+                OutlinedButton(onClick = onOpenGallery) {
+                    Text("Open gallery")
                 }
             }
         }
@@ -863,27 +949,49 @@ private fun PreviewDialog(
 }
 
 @Composable
-private fun GalleryDialog(
+private fun GalleryScreen(
     title: String,
     images: List<String>,
-    message: String?,
+    showOfflinePlaceholder: Boolean,
+    isOnline: Boolean,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF120E1D)),
+    FullScreenModal(onDismiss = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(text = title, style = MaterialTheme.typography.titleLarge)
-                message?.let {
-                    Text(text = it, style = MaterialTheme.typography.bodyMedium, color = AccentGold)
+            ModalTopBar(title = title, onDismiss = onDismiss)
+            if (showOfflinePlaceholder) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    OfflinePill(text = "Currently offline")
+                    Spacer(modifier = Modifier.height(18.dp))
+                    SkeletonImage(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .clip(RoundedCornerShape(24.dp)),
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    SkeletonImage(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp)
+                            .clip(RoundedCornerShape(20.dp)),
+                    )
+                }
+            } else {
+                if (!isOnline) {
+                    OfflinePill(text = "Currently offline")
                 }
                 LazyColumn(
-                    modifier = Modifier.height(420.dp),
+                    modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(images) { image ->
@@ -893,15 +1001,188 @@ private fun GalleryDialog(
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(220.dp)
-                                .clip(RoundedCornerShape(18.dp)),
+                                .height(240.dp)
+                                .clip(RoundedCornerShape(22.dp)),
                         )
                     }
-                }
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                    Text("Close")
                 }
             }
         }
     }
+}
+
+@Composable
+private fun QuickMenuOverlay(
+    onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center,
+    ) {
+        Button(onClick = onOpenSettings) {
+            Icon(Icons.Default.Settings, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Settings")
+        }
+    }
+}
+
+@Composable
+private fun SettingsScreen(
+    onDismiss: () -> Unit,
+    onRefreshCatalog: () -> Unit,
+    onClearCache: () -> Unit,
+    onClearData: () -> Unit,
+) {
+    FullScreenModal(onDismiss = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            ModalTopBar(title = "Settings", onDismiss = onDismiss)
+            Text(
+                text = "Refresh checks the home repo for changes. It does not force every biome image to download again.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextMuted,
+            )
+            Button(onClick = onRefreshCatalog, modifier = Modifier.fillMaxWidth()) {
+                Text("Refresh catalog")
+            }
+            OutlinedButton(onClick = onClearCache, modifier = Modifier.fillMaxWidth()) {
+                Text("Clear cache")
+            }
+            OutlinedButton(onClick = onClearData, modifier = Modifier.fillMaxWidth()) {
+                Text("Clear data")
+            }
+        }
+    }
+}
+
+@Composable
+private fun FullScreenModal(
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NightDeep),
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun ModalTopBar(
+    title: String,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onDismiss) {
+            Text("Close")
+        }
+    }
+}
+
+@Composable
+private fun OfflinePill(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(StatusSold.copy(alpha = 0.24f))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = text,
+            color = StatusSold,
+            style = MaterialTheme.typography.labelLarge,
+        )
+    }
+}
+
+@Composable
+private fun SkeletonImage(
+    modifier: Modifier = Modifier,
+) {
+    val shimmer = rememberInfiniteTransition(label = "skeleton")
+    val progress by shimmer.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1300, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "skeletonProgress",
+    )
+    val brush = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF1D1830),
+            Color(0xFF2A2340),
+            Color(0xFF1D1830),
+        ),
+        start = androidx.compose.ui.geometry.Offset(progress * 900f - 450f, 0f),
+        end = androidx.compose.ui.geometry.Offset(progress * 900f, 450f),
+    )
+
+    Box(
+        modifier = modifier.background(brush),
+    )
+}
+
+@Composable
+private fun rememberConnectivityState(): Boolean {
+    val context = LocalContext.current
+    val connectivityManager = remember(context) {
+        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    }
+    var online by remember { mutableStateOf(connectivityManager.isOnline()) }
+
+    DisposableEffect(connectivityManager) {
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                online = true
+            }
+
+            override fun onLost(network: Network) {
+                online = connectivityManager.isOnline()
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                online = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            }
+        }
+
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+
+        connectivityManager.registerNetworkCallback(request, callback)
+        onDispose {
+            runCatching { connectivityManager.unregisterNetworkCallback(callback) }
+        }
+    }
+
+    return online
+}
+
+private fun ConnectivityManager.isOnline(): Boolean {
+    val network = activeNetwork ?: return false
+    val capabilities = getNetworkCapabilities(network) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }

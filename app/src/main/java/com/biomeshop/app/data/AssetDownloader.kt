@@ -24,6 +24,21 @@ class BiomeAssetRepository(
         }
     }
 
+    suspend fun clearDownloadedBiomes() = withContext(Dispatchers.IO) {
+        if (biomesRoot.exists()) {
+            biomesRoot.deleteRecursively()
+        }
+        biomesRoot.mkdirs()
+    }
+
+    suspend fun clearAllCache() = withContext(Dispatchers.IO) {
+        if (cacheRoot.exists()) {
+            cacheRoot.deleteRecursively()
+        }
+        cacheRoot.mkdirs()
+        biomesRoot.mkdirs()
+    }
+
     suspend fun prepareBiomeAssets(biome: BiomeItem): BiomeAssetPrepareResult = withContext(Dispatchers.IO) {
         val existing = readCacheState(biome)
         if (existing.isCurrent && existing.hasAllRequiredFiles) {

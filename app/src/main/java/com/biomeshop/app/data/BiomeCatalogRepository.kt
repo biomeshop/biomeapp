@@ -77,6 +77,15 @@ class BiomeCatalogRepository(
         )
     }
 
+    suspend fun clearMetadataCache() = withContext(Dispatchers.IO) {
+        if (versionCacheFile.exists()) {
+            versionCacheFile.delete()
+        }
+        if (catalogCacheFile.exists()) {
+            catalogCacheFile.delete()
+        }
+    }
+
     private fun fetchVersion(): BiomeVersionData {
         val request = Request.Builder()
             .url(BiomeCatalogDefaults.remoteVersionUrl)

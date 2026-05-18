@@ -32,6 +32,10 @@
         padding: 14px 16px;
         background: rgba(12, 9, 19, 0.96);
         border-bottom: 1px solid rgba(255, 214, 102, 0.18);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
       }
 
       .label {
@@ -47,6 +51,16 @@
         font-size: 1.2rem;
       }
 
+      .close-button {
+        border: 0;
+        background: transparent;
+        color: #f6f2ff;
+        font: 600 0.95rem system-ui, sans-serif;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
       #viewer {
         width: 100%;
         height: calc(100vh - 72px);
@@ -57,8 +71,11 @@
   <body>
     <div class="shell">
       <header class="header">
-        <p class="label">BiomeShop Panorama</p>
-        <h1 id="title">Loading...</h1>
+        <div>
+          <p class="label">BiomeShop Panorama</p>
+          <h1 id="title">Loading...</h1>
+        </div>
+        <button class="close-button" type="button" id="closeButton">Close</button>
       </header>
       <div id="viewer"></div>
     </div>
@@ -76,12 +93,15 @@
       const croppedY = Number(params.get('croppedY') || '0');
 
       document.getElementById('title').textContent = title;
+      document.getElementById('closeButton').addEventListener('click', () => {
+        window.history.back();
+      });
 
       const config = {
         type: 'equirectangular',
         panorama: imageUrl,
         autoLoad: true,
-        showControls: true,
+        showControls: false,
         showFullscreenCtrl: false,
         mouseZoom: true,
         draggable: true,
