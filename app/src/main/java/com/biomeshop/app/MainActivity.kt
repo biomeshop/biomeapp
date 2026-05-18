@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -280,7 +281,7 @@ private fun HeroCard(onOpenUrl: (String) -> Unit) {
 }
 
 @Composable
-private fun StatBox(label: String, value: String) {
+private fun RowScope.StatBox(label: String, value: String) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x55201836)),
         shape = RoundedCornerShape(18.dp),
