@@ -87,7 +87,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.biomeshop.app.data.Availability
-import com.biomeshop.app.data.BiomeAssetPrepareResult
 import com.biomeshop.app.data.BiomeAssetRepository
 import com.biomeshop.app.data.BiomeCatalogData
 import com.biomeshop.app.data.BiomeCatalogDefaults
@@ -105,6 +104,7 @@ import com.biomeshop.app.ui.theme.NightDeep
 import com.biomeshop.app.ui.theme.StatusLive
 import com.biomeshop.app.ui.theme.StatusSold
 import com.biomeshop.app.ui.theme.TextMuted
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -141,12 +141,6 @@ private data class CatalogScreenState(
     val isLoading: Boolean = true,
 )
 
-private data class GalleryViewerState(
-    val item: BiomeItem,
-    val images: List<String>,
-    val showOfflinePlaceholder: Boolean,
-)
-
 private data class ConnectivityBanner(
     val text: String,
     val online: Boolean,
@@ -170,13 +164,11 @@ private fun BiomeShopApp() {
     var biomeFilter by rememberSaveable { mutableStateOf("all") }
     var statusFilter by rememberSaveable { mutableStateOf("all") }
     var priceOrder by rememberSaveable { mutableStateOf(PriceOrder.Default) }
-    var previewItem by remember { mutableStateOf<BiomeItem?>(null) }
-    var previewSyncingId by remember { mutableStateOf<String?>(null) }
-    var galleryViewer by remember { mutableStateOf<GalleryViewerState?>(null) }
     var refreshTick by remember { mutableIntStateOf(0) }
     var activeMenuScreen by remember { mutableStateOf<MenuScreen?>(null) }
     var banner by remember { mutableStateOf<ConnectivityBanner?>(null) }
     var knownConnectivity by remember { mutableStateOf<Boolean?>(null) }
+    var pendingNavigation by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(repository, assetRepository, refreshTick) {
         screenState = screenState.copy(isLoading = true)
@@ -226,48 +218,30 @@ private fun BiomeShopApp() {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
     }
 
-    fun prepareBiome(
-        item: BiomeItem,
-        onPrepared: (BiomeAssetPrepareResult) -> Unit,
-    ) {
-        scope.launch {
-            val result = assetRepository.prepareBiomeAssets(item)
-            biomeAssets = biomeAssets + (item.id to result.cache)
-            onPrepared(result)
+    fun launchLatestNavigation(action: () -> Unit) {
+        pendingNavigation?.cancel()
+        pendingNavigation = scope.launch {
+            delay(150)
+            action()
+            pendingNavigation = null
+        }
+    }
+
+    fun openDetails(item: BiomeItem) {
+        launchLatestNavigation {
+            context.startActivity(BiomeDetailActivity.intent(context, item))
         }
     }
 
     fun openPanorama(item: BiomeItem) {
-        val panorama = item.panorama
-        if (panorama == null) {
-            Toast.makeText(context, "No panorama available for this biome yet.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        prepareBiome(item) { result ->
-            val resolved = panorama.copy(imageUrl = assetRepository.panoramaUrl(item, result.cache))
-            context.startActivity(PanoramaActivity.intent(context, item.name, resolved))
+        launchLatestNavigation {
+            context.startActivity(PanoramaActivity.intent(context, item))
         }
     }
 
     fun openGallery(item: BiomeItem) {
-        val currentCache = biomeAssets[item.id]
-        if (!isOnline && currentCache?.galleryFiles.isNullOrEmpty()) {
-            galleryViewer = GalleryViewerState(
-                item = item,
-                images = emptyList(),
-                showOfflinePlaceholder = true,
-            )
-            return
-        }
-
-        prepareBiome(item) { result ->
-            val images = assetRepository.galleryModels(item, result.cache)
-            galleryViewer = GalleryViewerState(
-                item = item,
-                images = images,
-                showOfflinePlaceholder = !isOnline && images.isEmpty(),
-            )
+        launchLatestNavigation {
+            context.startActivity(BiomeGalleryActivity.intent(context, item))
         }
     }
 
@@ -280,8 +254,6 @@ private fun BiomeShopApp() {
         scope.launch {
             assetRepository.clearDownloadedBiomes()
             biomeAssets = assetRepository.inspectCatalog(screenState.catalog)
-            galleryViewer = null
-            previewItem = null
             Toast.makeText(context, "Downloaded biome images cleared.", Toast.LENGTH_SHORT).show()
         }
     }
@@ -291,8 +263,6 @@ private fun BiomeShopApp() {
             assetRepository.clearAllCache()
             repository.clearMetadataCache()
             biomeAssets = emptyMap()
-            galleryViewer = null
-            previewItem = null
             refreshTick += 1
             activeMenuScreen = null
             Toast.makeText(context, "Catalog data and downloaded images cleared.", Toast.LENGTH_SHORT).show()
@@ -322,10 +292,7 @@ private fun BiomeShopApp() {
                     FeaturedCard(
                         item = featured,
                         imageModel = assetRepository.previewModel(featured, biomeAssets[featured.id]),
-                        onPreview = {
-                            previewItem = it
-                            previewSyncingId = it.id
-                        },
+                        onPreview = ::openDetails,
                         onOpenGallery = ::openGallery,
                         onOpenPanorama = ::openPanorama,
                     )
@@ -357,10 +324,7 @@ private fun BiomeShopApp() {
                     InventoryCard(
                         item = item,
                         imageModel = assetRepository.previewModel(item, biomeAssets[item.id]),
-                        onPreview = {
-                            previewItem = it
-                            previewSyncingId = it.id
-                        },
+                        onPreview = ::openDetails,
                         onOpenGallery = ::openGallery,
                         onOpenPanorama = ::openPanorama,
                     )
@@ -374,31 +338,6 @@ private fun BiomeShopApp() {
                 .align(Alignment.TopCenter)
                 .padding(top = 18.dp),
         )
-
-        previewItem?.let { item ->
-            PreviewScreen(
-                item = item,
-                imageModel = assetRepository.previewModel(item, biomeAssets[item.id]),
-                isSyncing = previewSyncingId == item.id,
-                onDismiss = {
-                    previewItem = null
-                    previewSyncingId = null
-                },
-                onOpenGallery = { openGallery(item) },
-                onOpenPanorama = { openPanorama(item) },
-            )
-        }
-
-        galleryViewer?.let { viewer ->
-            GalleryScreen(
-                title = viewer.item.name,
-                images = viewer.images,
-                showOfflinePlaceholder = viewer.showOfflinePlaceholder,
-                isOnline = isOnline,
-                onDismiss = { galleryViewer = null },
-            )
-        }
-
         when (activeMenuScreen) {
             MenuScreen.QuickMenu -> {
                 QuickMenuOverlay(
@@ -415,15 +354,6 @@ private fun BiomeShopApp() {
                 )
             }
             null -> Unit
-        }
-    }
-
-    LaunchedEffect(previewItem?.id, previewItem?.revision) {
-        val item = previewItem ?: return@LaunchedEffect
-        val result = assetRepository.prepareBiomeAssets(item)
-        biomeAssets = biomeAssets + (item.id to result.cache)
-        if (previewSyncingId == item.id) {
-            previewSyncingId = null
         }
     }
 }

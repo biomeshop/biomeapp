@@ -1,0 +1,30 @@
+2026-05-19
+
+Summary:
+- Reworked biome details, gallery, and 360 viewing so they open as full-screen routes instead of in-activity modal overlays.
+- Made route opening immediate and moved file preparation into each destination screen.
+- Added short click debouncing so repeated taps do not stack multiple delayed route launches.
+
+Problems found:
+- The old 360 close button lived inside the HTML viewer and called browser history, so it could do nothing when there was no WebView history entry.
+- Gallery and 360 opening waited for downloads before navigation, which made the app feel unresponsive on first install.
+- Repeated human taps could queue multiple delayed opens and then launch several viewers/modals at once.
+- Gallery and detail screens were overlays inside `MainActivity`, so Android system back did not behave like normal full-screen pages.
+- Offline or missing asset states were not handled smoothly for panorama and gallery when no local files existed yet.
+
+Changes made:
+- Added `BiomeDetailActivity` for the old details modal.
+- Added `BiomeGalleryActivity` for the old gallery modal.
+- Rebuilt `PanoramaActivity` as a Compose full-screen route with a native top bar and finish-based close behavior.
+- Added shared UI helpers in `SharedUi.kt` for the route top bar, skeletons, offline pill, and shared content widgets.
+- Added `BiomeItemIntent.kt` so biome data can be passed cleanly between activities.
+- Added `inspectBiome()` to the asset repository for immediate route state checks without waiting for full catalog inspection.
+- Simplified `panorama_viewer.html` so the viewer no longer renders its own broken close header.
+
+Why this approach:
+- Opening the route first gives immediate feedback and lets loading/offline handling happen where the user already expects to be.
+- Using real activities makes phone back behavior natural and keeps close actions consistent with Android navigation.
+- Keeping download work inside the destination screen prevents delayed callback stacking from the source list screen.
+
+Known verification limit:
+- This machine still does not have Java, Gradle, or Android build tools installed, so the changes were sanity-checked locally but not compiled into an APK here.

@@ -12,6 +12,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BiomeShop">
         <activity
+            android:name=".BiomeGalleryActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BiomeShop" />
+        <activity
+            android:name=".BiomeDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BiomeShop" />
+        <activity
             android:name=".PanoramaActivity"
             android:exported="false"
             android:theme="@style/Theme.BiomeShop" />

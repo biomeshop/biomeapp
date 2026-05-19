@@ -24,6 +24,10 @@ class BiomeAssetRepository(
         }
     }
 
+    suspend fun inspectBiome(item: BiomeItem): CachedBiomeAssets = withContext(Dispatchers.IO) {
+        readCacheState(item)
+    }
+
     suspend fun clearDownloadedBiomes() = withContext(Dispatchers.IO) {
         if (biomesRoot.exists()) {
             biomesRoot.deleteRecursively()
