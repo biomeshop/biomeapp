@@ -1,22 +1,13 @@
 package com.biomeshop.app
 
-import android.content.Context
 import android.content.Intent
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -54,7 +45,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -62,9 +52,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -77,13 +65,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.biomeshop.app.data.Availability
@@ -100,7 +85,6 @@ import com.biomeshop.app.ui.theme.AccentGold
 import com.biomeshop.app.ui.theme.AccentPink
 import com.biomeshop.app.ui.theme.BiomeShopTheme
 import com.biomeshop.app.ui.theme.Night
-import com.biomeshop.app.ui.theme.NightDeep
 import com.biomeshop.app.ui.theme.StatusLive
 import com.biomeshop.app.ui.theme.StatusSold
 import com.biomeshop.app.ui.theme.TextMuted
@@ -705,70 +689,6 @@ private fun InventoryCard(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun TypeChipRow(types: List<String>) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        types.forEach { type ->
-            FilterChip(
-                selected = true,
-                onClick = { },
-                enabled = false,
-                label = { Text(type.replaceFirstChar { it.uppercase() }) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun RemoteBiomeImage(
-    imageModel: String,
-    contentDescription: String,
-    height: Dp,
-) {
-    AsyncImage(
-        model = imageModel,
-        contentDescription = contentDescription,
-        contentScale = ContentScale.Crop,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(height)
-            .clip(RoundedCornerShape(20.dp)),
-    )
-}
-
-@Composable
-private fun PriceText(price: String) {
-    Text(
-        text = price,
-        style = MaterialTheme.typography.titleLarge,
-        color = AccentGold,
-        fontWeight = FontWeight.Bold,
-    )
-}
-
-@Composable
-private fun StatusChip(status: Availability) {
-    val background = if (status == Availability.Available) StatusLive.copy(alpha = 0.2f) else StatusSold.copy(alpha = 0.2f)
-    val foreground = if (status == Availability.Available) StatusLive else StatusSold
-
-    Box(
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(background)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    ) {
-        Text(
-            text = status.name.uppercase(),
-            color = foreground,
-            style = MaterialTheme.typography.labelLarge,
-        )
-    }
-}
-
 @Composable
 private fun ConnectivityStatusBanner(
     banner: ConnectivityBanner?,
@@ -813,135 +733,6 @@ private fun ConnectivityStatusBanner(
 }
 
 @Composable
-private fun PreviewScreen(
-    item: BiomeItem,
-    imageModel: String,
-    isSyncing: Boolean,
-    onDismiss: () -> Unit,
-    onOpenGallery: () -> Unit,
-    onOpenPanorama: () -> Unit,
-) {
-    FullScreenModal(onDismiss = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-        ) {
-            ModalTopBar(title = item.name, onDismiss = onDismiss)
-            Box {
-                AsyncImage(
-                    model = imageModel,
-                    contentDescription = item.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(320.dp)
-                        .clip(RoundedCornerShape(24.dp)),
-                )
-                if (isSyncing) {
-                    SkeletonImage(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(320.dp)
-                            .clip(RoundedCornerShape(24.dp)),
-                    )
-                }
-            }
-            TypeChipRow(item.types)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PriceText(item.priceLabel)
-                StatusChip(item.status)
-            }
-            Text(
-                text = item.description,
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextMuted,
-            )
-            @OptIn(ExperimentalLayoutApi::class)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Button(onClick = onOpenPanorama) {
-                    Text("Open 360")
-                }
-                OutlinedButton(onClick = onOpenGallery) {
-                    Text("Open gallery")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GalleryScreen(
-    title: String,
-    images: List<String>,
-    showOfflinePlaceholder: Boolean,
-    isOnline: Boolean,
-    onDismiss: () -> Unit,
-) {
-    FullScreenModal(onDismiss = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            ModalTopBar(title = title, onDismiss = onDismiss)
-            if (showOfflinePlaceholder) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    OfflinePill(text = "Currently offline")
-                    Spacer(modifier = Modifier.height(18.dp))
-                    SkeletonImage(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                            .clip(RoundedCornerShape(24.dp)),
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    SkeletonImage(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp)
-                            .clip(RoundedCornerShape(20.dp)),
-                    )
-                }
-            } else {
-                if (!isOnline) {
-                    OfflinePill(text = "Currently offline")
-                }
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(images) { image ->
-                        AsyncImage(
-                            model = image,
-                            contentDescription = title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(240.dp)
-                                .clip(RoundedCornerShape(22.dp)),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun QuickMenuOverlay(
     onDismiss: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -968,14 +759,14 @@ private fun SettingsScreen(
     onClearCache: () -> Unit,
     onClearData: () -> Unit,
 ) {
-    FullScreenModal(onDismiss = onDismiss) {
+    FullScreenSurface {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            ModalTopBar(title = "Settings", onDismiss = onDismiss)
+            RouteTopBar(title = "Settings", onClose = onDismiss)
             Text(
                 text = "Refresh checks the home repo for changes. It does not force every biome image to download again.",
                 style = MaterialTheme.typography.bodyLarge,
@@ -992,127 +783,4 @@ private fun SettingsScreen(
             }
         }
     }
-}
-
-@Composable
-private fun FullScreenModal(
-    onDismiss: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NightDeep),
-    ) {
-        content()
-    }
-}
-
-@Composable
-private fun ModalTopBar(
-    title: String,
-    onDismiss: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.weight(1f),
-        )
-        TextButton(onClick = onDismiss) {
-            Text("Close")
-        }
-    }
-}
-
-@Composable
-private fun OfflinePill(text: String) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(StatusSold.copy(alpha = 0.24f))
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-    ) {
-        Text(
-            text = text,
-            color = StatusSold,
-            style = MaterialTheme.typography.labelLarge,
-        )
-    }
-}
-
-@Composable
-private fun SkeletonImage(
-    modifier: Modifier = Modifier,
-) {
-    val shimmer = rememberInfiniteTransition(label = "skeleton")
-    val progress by shimmer.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1300, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "skeletonProgress",
-    )
-    val brush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFF1D1830),
-            Color(0xFF2A2340),
-            Color(0xFF1D1830),
-        ),
-        start = androidx.compose.ui.geometry.Offset(progress * 900f - 450f, 0f),
-        end = androidx.compose.ui.geometry.Offset(progress * 900f, 450f),
-    )
-
-    Box(
-        modifier = modifier.background(brush),
-    )
-}
-
-@Composable
-private fun rememberConnectivityState(): Boolean {
-    val context = LocalContext.current
-    val connectivityManager = remember(context) {
-        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    }
-    var online by remember { mutableStateOf(connectivityManager.isOnline()) }
-
-    DisposableEffect(connectivityManager) {
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                online = true
-            }
-
-            override fun onLost(network: Network) {
-                online = connectivityManager.isOnline()
-            }
-
-            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                online = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            }
-        }
-
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-
-        connectivityManager.registerNetworkCallback(request, callback)
-        onDispose {
-            runCatching { connectivityManager.unregisterNetworkCallback(callback) }
-        }
-    }
-
-    return online
-}
-
-private fun ConnectivityManager.isOnline(): Boolean {
-    val network = activeNetwork ?: return false
-    val capabilities = getNetworkCapabilities(network) ?: return false
-    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }

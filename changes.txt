@@ -28,3 +28,11 @@ Why this approach:
 
 Known verification limit:
 - This machine still does not have Java, Gradle, or Android build tools installed, so the changes were sanity-checked locally but not compiled into an APK here.
+
+2026-05-19 follow-up
+
+CI compile fix:
+- GitHub Actions failed because old helper composables still existed in `MainActivity.kt` after the new shared helper file was introduced.
+- That created conflicting overloads for `OfflinePill`, `SkeletonImage`, `TypeChipRow`, `RemoteBiomeImage`, `PriceText`, `StatusChip`, and `rememberConnectivityState`.
+- Fix: removed the stale duplicated helpers and old modal-only screens from `MainActivity.kt`, then updated settings to use the shared route helpers.
+- Also removed the problematic direct `weight` usage in `PanoramaActivity.kt` and switched the panorama layout to a simpler `LazyColumn` plus fixed-height viewer block for better compatibility with the current Compose setup in CI.

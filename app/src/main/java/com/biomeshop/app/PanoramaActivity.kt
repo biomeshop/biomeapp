@@ -16,8 +16,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -115,42 +116,52 @@ private fun PanoramaRoute(
     )
 
     FullScreenSurface {
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            RouteTopBar(title = item.name, onClose = onClose)
+            item {
+                RouteTopBar(title = item.name, onClose = onClose)
+            }
 
             when {
                 canRenderPanorama && panoramaSpec != null -> {
                     if (!isOnline && hasLocalPanorama) {
-                        OfflinePill(text = "Currently offline")
+                        item {
+                            OfflinePill(text = "Currently offline")
+                        }
                     }
                     if (isSyncing) {
-                        Text(
-                            text = "Syncing 360 files in the background.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = TextMuted,
+                        item {
+                            Text(
+                                text = "Syncing 360 files in the background.",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = TextMuted,
+                            )
+                        }
+                    }
+                    item {
+                        PanoramaWebView(
+                            title = item.name,
+                            panorama = panoramaSpec!!,
+                            panoramaUrl = panoramaUrl,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(520.dp),
                         )
                     }
-                    PanoramaWebView(
-                        title = item.name,
-                        panorama = panoramaSpec!!,
-                        panoramaUrl = panoramaUrl,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                    )
                 }
                 else -> {
-                    AssetPlaceholder(
-                        label = placeholderLabel.ifBlank { "Loading 360 view" },
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                    )
+                    item {
+                        AssetPlaceholder(
+                            label = placeholderLabel.ifBlank { "Loading 360 view" },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(520.dp),
+                        )
+                    }
                 }
             }
         }
