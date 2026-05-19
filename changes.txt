@@ -53,3 +53,11 @@ Refresh interaction and polish:
 - Replaced the panorama "syncing" text with a simpler circular loading indicator.
 - Rotated the hero description through three short lines on a timed transition.
 - Added an owner label under the biome stats and softened the home menu button appearance.
+
+2026-05-19 CI follow-up
+
+GitHub Actions compile fix:
+- GitHub Actions next failed in `SharedUi.kt` with `Cannot access 'weight': it is internal in 'androidx.compose.foundation.layout'`.
+- Cause: the shared route top bar was rewritten to import and use `Modifier.weight`, but this project's current Compose/compiler setup in CI does not expose that import as a safe public API in this context.
+- Fix: removed the `weight` import and rebuilt `RouteTopBar` as a `Box` layout with the title padded away from the trailing close button.
+- Compatibility note for future AI work: avoid introducing `Modifier.weight` into shared route helpers unless the exact Compose version and import behavior are confirmed locally or in CI. Prefer simpler `Box` or fixed-spacing layouts in shared files when compatibility is uncertain.

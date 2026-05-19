@@ -18,14 +18,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -78,18 +76,21 @@ internal fun RouteTopBar(
     title: String,
     onClose: () -> Unit,
 ) {
-    Row(
+    Box(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = title,
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(end = 88.dp),
         )
-        TextButton(onClick = onClose) {
+        TextButton(
+            onClick = onClose,
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
             Text("Close")
         }
     }
