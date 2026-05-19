@@ -68,3 +68,13 @@ Launcher icon update:
 - Replaced the adaptive launcher icon art with the supplied `icon.png` mushroom asset.
 - Added the image as `res/drawable-nodpi/ic_launcher_art.png` and pointed the adaptive icon background drawable at it.
 - Made the adaptive foreground transparent so the supplied artwork renders directly as the app icon on Android 8+ launchers.
+
+2026-05-19 route polish follow-up
+
+Panorama and settings cleanup:
+- Removed the circular trim-path loading spinner from the 360 route.
+- Kept only a rounded `Downloading panorama...` status pill while panorama files are being prepared.
+- Removed the extra loading label from the 360 placeholder during the download/loading state so the screen stays cleaner.
+- Changed the settings panel helper copy to a simple `Files and storage` label.
+- Updated the displayed owner fallback from `BiomeShop` to `orcMaster`, including the bundled default catalog owner value.
+- Increased the rounding on the panorama download status pill so it feels softer and less boxy.
