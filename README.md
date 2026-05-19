@@ -16,7 +16,7 @@ Native Kotlin Android app based on [BiomeShop](https://biomeshop.github.io/home/
 - Native biome inventory cards
 - Remote image loading from the live Biomeshop asset host
 - GitHub Actions workflow that builds the latest APK and uploads it as an artifact
-- A checked-in APK file at `downloads/biomeshop-latest.apk` for a simple public website download link
+- A public APK file at `downloads/biomeshop-latest.apk` that the `main` build refreshes after successful GitHub Actions builds
 
 ## Why GitHub Actions is included
 
@@ -34,7 +34,7 @@ Current simple public download flow:
 2. Download `biomeshop-latest.apk`.
 3. Install it on Android.
 
-If a newer APK is built later, replace `downloads/biomeshop-latest.apk` and push again to keep the website link pointing at the latest file.
+After a successful `main` build, GitHub Actions updates `downloads/biomeshop-latest.apk` automatically so the same website link keeps serving the newest built APK.
 
 ## Local build
 

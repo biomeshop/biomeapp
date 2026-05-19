@@ -92,3 +92,11 @@ Public APK naming cleanup:
 - Renamed the public APK file from `biomeshop-debug.apk` to `biomeshop-latest.apk`.
 - Updated the README download link and file references to use `biomeshop-latest.apk`.
 - Updated the GitHub Actions artifact name and release asset copy step so future builds also publish `biomeshop-latest.apk`.
+
+2026-05-19 APK sync follow-up
+
+Latest-build download fix:
+- Found that the README link was pointing at `raw/main/downloads/biomeshop-latest.apk`, which only serves the APK file committed in git, not the newer APK built inside GitHub Actions.
+- Root cause: the workflow built fresh APKs and uploaded artifacts/releases, but it never wrote the latest built APK back to `downloads/biomeshop-latest.apk` in the repository.
+- Fix: updated the `main` workflow to copy the newly built APK into `downloads/biomeshop-latest.apk` and push that file back to the repo after a successful build.
+- Added a guard so bot-authored APK refresh commits do not recurse into another full build loop.

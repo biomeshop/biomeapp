@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   build:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
@@ -30,6 +31,21 @@ jobs:
 
       - name: Build latest APK
         run: gradle assembleDebug
+
+      - name: Update public APK file in repo
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p downloads
+          cp app/build/outputs/apk/debug/app-debug.apk downloads/biomeshop-latest.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads/biomeshop-latest.apk
+          if git diff --cached --quiet; then
+            echo "Public APK is already up to date."
+          else
+            git commit -m "Update latest APK [skip ci]"
+            git push
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
