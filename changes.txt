@@ -83,5 +83,12 @@ Panorama and settings cleanup:
 
 Public download link fix:
 - The earlier README release link returned 404 because no `apk-latest` release asset had actually been published yet.
-- Switched the public download target to a real checked-in APK file at `downloads/biomeshop-debug.apk` so the website can link to a live GitHub-hosted file immediately.
+- Switched the public download target to a real checked-in APK file in the repo so the website can link to a live GitHub-hosted file immediately.
 - Updated the README to point at the raw GitHub file URL instead of the missing release asset URL.
+
+2026-05-19 APK naming follow-up
+
+Public APK naming cleanup:
+- Renamed the public APK file from `biomeshop-debug.apk` to `biomeshop-latest.apk`.
+- Updated the README download link and file references to use `biomeshop-latest.apk`.
+- Updated the GitHub Actions artifact name and release asset copy step so future builds also publish `biomeshop-latest.apk`.

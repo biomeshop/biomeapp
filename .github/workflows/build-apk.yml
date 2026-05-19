@@ -28,18 +28,18 @@ jobs:
         with:
           gradle-version: 8.7
 
-      - name: Build debug APK
+      - name: Build latest APK
         run: gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: biomeshop-debug-apk
+          name: biomeshop-latest-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Prepare release APK name
         if: github.ref == 'refs/heads/main'
-        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/biomeshop-debug.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/biomeshop-latest.apk
 
       - name: Publish stable APK release
         if: github.ref == 'refs/heads/main'
@@ -47,8 +47,8 @@ jobs:
         with:
           allowUpdates: true
           artifactErrorsFailBuild: true
-          artifacts: app/build/outputs/apk/debug/biomeshop-debug.apk
-          body: Latest debug APK built from the current `main` branch.
+          artifacts: app/build/outputs/apk/debug/biomeshop-latest.apk
+          body: Latest APK built from the current `main` branch.
           name: Latest APK
           replacesArtifacts: true
           tag: apk-latest

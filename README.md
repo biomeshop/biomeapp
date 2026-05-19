@@ -4,8 +4,8 @@ Native Kotlin Android app based on [BiomeShop](https://biomeshop.github.io/home/
 
 ## Download APK
 
-- Stable APK link for your website: [Download latest APK](https://github.com/biomeshop/biomeapp/raw/main/downloads/biomeshop-debug.apk)
-- Repository file page: [APK file in repo](https://github.com/biomeshop/biomeapp/blob/main/downloads/biomeshop-debug.apk)
+- Stable APK link for your website: [Download latest APK](https://github.com/biomeshop/biomeapp/raw/main/downloads/biomeshop-latest.apk)
+- Repository file page: [APK file in repo](https://github.com/biomeshop/biomeapp/blob/main/downloads/biomeshop-latest.apk)
 
 ## What it includes
 
@@ -15,8 +15,8 @@ Native Kotlin Android app based on [BiomeShop](https://biomeshop.github.io/home/
 - Filters for biome type, status, and price order
 - Native biome inventory cards
 - Remote image loading from the live Biomeshop asset host
-- GitHub Actions workflow that builds a debug APK and uploads it as an artifact
-- A checked-in APK file at `downloads/biomeshop-debug.apk` for a simple public website download link
+- GitHub Actions workflow that builds the latest APK and uploads it as an artifact
+- A checked-in APK file at `downloads/biomeshop-latest.apk` for a simple public website download link
 
 ## Why GitHub Actions is included
 
@@ -31,10 +31,10 @@ Push the contents of this `android-app` folder to a GitHub repository.
 Current simple public download flow:
 
 1. Use the stable link above.
-2. Download `biomeshop-debug.apk`.
+2. Download `biomeshop-latest.apk`.
 3. Install it on Android.
 
-If a newer APK is built later, replace `downloads/biomeshop-debug.apk` and push again to keep the website link pointing at the latest file.
+If a newer APK is built later, replace `downloads/biomeshop-latest.apk` and push again to keep the website link pointing at the latest file.
 
 ## Local build
 
