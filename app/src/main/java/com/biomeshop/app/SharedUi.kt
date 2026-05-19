@@ -12,6 +12,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -222,6 +224,26 @@ internal fun AssetPlaceholder(
                 .fillMaxWidth()
                 .height(140.dp)
                 .clip(RoundedCornerShape(20.dp)),
+        )
+    }
+}
+
+@Composable
+internal fun CompactLoadingIndicator(
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(58.dp)
+            .clip(CircleShape)
+            .background(Color(0xFF29243A))
+            .border(width = 1.dp, color = Color(0xFF4A445F), shape = CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(28.dp),
+            color = Color(0xFFE4DFF7),
+            strokeWidth = 3.dp,
         )
     }
 }

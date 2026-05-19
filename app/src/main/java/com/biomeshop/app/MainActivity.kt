@@ -6,11 +6,13 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,8 +30,10 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +46,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,15 +68,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Velocity
 import coil.compose.AsyncImage
 import com.biomeshop.app.data.Availability
 import com.biomeshop.app.data.BiomeAssetRepository
@@ -145,6 +156,8 @@ private fun BiomeShopApp() {
     val repository = remember(context) { BiomeCatalogRepository(context.applicationContext) }
     val assetRepository = remember(context) { BiomeAssetRepository(context.applicationContext) }
     val isOnline = rememberConnectivityState()
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
 
     var screenState by remember { mutableStateOf(CatalogScreenState()) }
     var biomeAssets by remember { mutableStateOf<Map<String, CachedBiomeAssets>>(emptyMap()) }
@@ -156,6 +169,11 @@ private fun BiomeShopApp() {
     var banner by remember { mutableStateOf<ConnectivityBanner?>(null) }
     var knownConnectivity by remember { mutableStateOf<Boolean?>(null) }
     var pendingNavigation by remember { mutableStateOf<Job?>(null) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    var pullDistance by remember { mutableStateOf(0f) }
+
+    val refreshThresholdPx = with(density) { 96.dp.toPx() }
+    val maxPullPx = with(density) { 168.dp.toPx() }
 
     LaunchedEffect(repository, assetRepository, refreshTick) {
         screenState = screenState.copy(isLoading = true)
@@ -165,6 +183,7 @@ private fun BiomeShopApp() {
             catalog = result.catalog,
             isLoading = false,
         )
+        isRefreshing = false
     }
 
     LaunchedEffect(isOnline) {
@@ -233,6 +252,8 @@ private fun BiomeShopApp() {
     }
 
     fun refreshCatalog() {
+        if (isRefreshing) return
+        isRefreshing = true
         refreshTick += 1
         activeMenuScreen = null
     }
@@ -256,66 +277,122 @@ private fun BiomeShopApp() {
         }
     }
 
+    val pullRefreshConnection = remember(listState, isRefreshing, refreshThresholdPx, maxPullPx) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < 0 && pullDistance > 0f) {
+                    val newDistance = (pullDistance + available.y).coerceAtLeast(0f)
+                    val consumed = newDistance - pullDistance
+                    pullDistance = newDistance
+                    return Offset(0f, consumed)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (available.y > 0 && listState.isAtTop() && !isRefreshing) {
+                    val dragAmount = available.y * 0.45f
+                    pullDistance = (pullDistance + dragAmount).coerceAtMost(maxPullPx)
+                    return Offset(0f, dragAmount)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pullDistance >= refreshThresholdPx && !isRefreshing) {
+                    refreshCatalog()
+                }
+                pullDistance = 0f
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                pullDistance = 0f
+                return Velocity.Zero
+            }
+        }
+    }
+
+    val pullProgress = (pullDistance / refreshThresholdPx).coerceIn(0f, 1f)
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(containerColor = Night) { innerPadding ->
-            LazyColumn(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .padding(innerPadding)
+                    .nestedScroll(pullRefreshConnection),
             ) {
-                item {
-                    HeroCard(
-                        catalog = catalog,
-                        isLoading = screenState.isLoading,
-                        biomeCount = catalog.items.size,
-                        availableCount = availableCount,
-                        onOpenUrl = ::openUrl,
-                        onOpenMenu = { activeMenuScreen = MenuScreen.QuickMenu },
-                    )
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    item {
+                        HeroCard(
+                            catalog = catalog,
+                            isLoading = screenState.isLoading,
+                            biomeCount = catalog.items.size,
+                            availableCount = availableCount,
+                            onOpenUrl = ::openUrl,
+                            onOpenMenu = { activeMenuScreen = MenuScreen.QuickMenu },
+                        )
+                    }
+                    item {
+                        FeaturedCard(
+                            item = featured,
+                            imageModel = assetRepository.previewModel(featured, biomeAssets[featured.id]),
+                            onPreview = ::openDetails,
+                            onOpenGallery = ::openGallery,
+                            onOpenPanorama = ::openPanorama,
+                        )
+                    }
+                    item {
+                        FilterSection(
+                            biomeOptions = catalog.biomeOptions,
+                            biomeFilter = biomeFilter,
+                            statusFilter = statusFilter,
+                            priceOrder = priceOrder,
+                            onBiomeChange = { biomeFilter = it },
+                            onStatusChange = { statusFilter = it },
+                            onPriceChange = { priceOrder = it },
+                            onReset = {
+                                biomeFilter = "all"
+                                statusFilter = "all"
+                                priceOrder = PriceOrder.Default
+                            },
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "${visibleItems.size} biomes",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = AccentGold,
+                        )
+                    }
+                    items(visibleItems, key = { it.id }) { item ->
+                        InventoryCard(
+                            item = item,
+                            imageModel = assetRepository.previewModel(item, biomeAssets[item.id]),
+                            onPreview = ::openDetails,
+                            onOpenGallery = ::openGallery,
+                            onOpenPanorama = ::openPanorama,
+                        )
+                    }
                 }
-                item {
-                    FeaturedCard(
-                        item = featured,
-                        imageModel = assetRepository.previewModel(featured, biomeAssets[featured.id]),
-                        onPreview = ::openDetails,
-                        onOpenGallery = ::openGallery,
-                        onOpenPanorama = ::openPanorama,
-                    )
-                }
-                item {
-                    FilterSection(
-                        biomeOptions = catalog.biomeOptions,
-                        biomeFilter = biomeFilter,
-                        statusFilter = statusFilter,
-                        priceOrder = priceOrder,
-                        onBiomeChange = { biomeFilter = it },
-                        onStatusChange = { statusFilter = it },
-                        onPriceChange = { priceOrder = it },
-                        onReset = {
-                            biomeFilter = "all"
-                            statusFilter = "all"
-                            priceOrder = PriceOrder.Default
-                        },
-                    )
-                }
-                item {
-                    Text(
-                        text = "${visibleItems.size} biomes",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = AccentGold,
-                    )
-                }
-                items(visibleItems, key = { it.id }) { item ->
-                    InventoryCard(
-                        item = item,
-                        imageModel = assetRepository.previewModel(item, biomeAssets[item.id]),
-                        onPreview = ::openDetails,
-                        onOpenGallery = ::openGallery,
-                        onOpenPanorama = ::openPanorama,
-                    )
-                }
+
+                PullRefreshIndicator(
+                    progress = pullProgress,
+                    isRefreshing = isRefreshing,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 12.dp),
+                )
             }
         }
 
@@ -335,7 +412,6 @@ private fun BiomeShopApp() {
             MenuScreen.Settings -> {
                 SettingsScreen(
                     onDismiss = { activeMenuScreen = null },
-                    onRefreshCatalog = ::refreshCatalog,
                     onClearCache = ::clearDownloadedImages,
                     onClearData = ::clearAllData,
                 )
@@ -377,6 +453,22 @@ private fun HeroCard(
     onOpenUrl: (String) -> Unit,
     onOpenMenu: () -> Unit,
 ) {
+    val rotatingLines = remember {
+        listOf(
+            "Browse available Biomeshop biomes offline and pick land that fits your next build.",
+            "Choose rare untouched biomes available now for your future build plans.",
+            "Purely untouched, untainted, naturally generated biomes ready for your world.",
+        )
+    }
+    var activeLineIndex by remember { mutableStateOf(0) }
+
+    LaunchedEffect(rotatingLines) {
+        while (true) {
+            delay(5000)
+            activeLineIndex = (activeLineIndex + 1) % rotatingLines.size
+        }
+    }
+
     Card(
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -413,9 +505,9 @@ private fun HeroCard(
                         onClick = onOpenMenu,
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(Color(0x44140F20)),
+                            .background(Color(0x22140F20)),
                     ) {
-                        Icon(Icons.Default.Home, contentDescription = "Home menu", tint = AccentGold)
+                        Icon(Icons.Default.Home, contentDescription = "Home menu", tint = TextMuted.copy(alpha = 0.76f))
                     }
                 }
 
@@ -429,15 +521,17 @@ private fun HeroCard(
                     style = MaterialTheme.typography.headlineLarge,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
-                Text(
-                    text = if (isLoading) {
-                        "Checking for changes from the live biome catalog."
-                    } else {
-                        "Browse, inspect, and download biome details with a smoother offline-first flow."
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextMuted,
-                )
+                Crossfade(targetState = if (isLoading) -1 else activeLineIndex, label = "heroMessage") { target ->
+                    Text(
+                        text = if (target == -1) {
+                            "Checking for changes from the live biome catalog."
+                        } else {
+                            rotatingLines[target]
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextMuted,
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -445,6 +539,18 @@ private fun HeroCard(
                 ) {
                     StatBox("Biomes", if (biomeCount >= 10) "10+" else biomeCount.toString(), AccentGold)
                     StatBox("Available", availableCount.toString(), StatusLive)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "OWNER",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = AccentPink,
+                    )
+                    Text(
+                        text = catalog.ownerName.ifBlank { "orcMaster" },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
                 }
 
                 Button(onClick = { onOpenUrl(catalog.siteUrl) }) {
@@ -758,7 +864,6 @@ private fun QuickMenuOverlay(
 @Composable
 private fun SettingsScreen(
     onDismiss: () -> Unit,
-    onRefreshCatalog: () -> Unit,
     onClearCache: () -> Unit,
     onClearData: () -> Unit,
 ) {
@@ -771,13 +876,10 @@ private fun SettingsScreen(
         ) {
             RouteTopBar(title = "Settings", onClose = onDismiss)
             Text(
-                text = "Refresh checks the home repo for changes. It does not force every biome image to download again.",
+                text = "Pull down from the very top of the home feed to refresh the catalog. This still does not force every biome image to download again.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = TextMuted,
             )
-            Button(onClick = onRefreshCatalog, modifier = Modifier.fillMaxWidth()) {
-                Text("Refresh catalog")
-            }
             OutlinedButton(onClick = onClearCache, modifier = Modifier.fillMaxWidth()) {
                 Text("Clear cache")
             }
@@ -787,3 +889,39 @@ private fun SettingsScreen(
         }
     }
 }
+
+@Composable
+private fun PullRefreshIndicator(
+    progress: Float,
+    isRefreshing: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val visible = isRefreshing || progress > 0f
+    val containerAlpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = 180),
+        label = "pullRefreshAlpha",
+    )
+    val visualProgress = if (isRefreshing) 0.22f else progress.coerceIn(0.08f, 0.95f)
+
+    if (!visible) return
+
+    Box(
+        modifier = modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .background(Color(0xFF29243A).copy(alpha = containerAlpha))
+            .border(width = 1.dp, color = Color(0xFF4A445F).copy(alpha = containerAlpha), shape = CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(
+            progress = visualProgress,
+            modifier = Modifier.size(28.dp),
+            color = Color(0xFFE4DFF7),
+            strokeWidth = 3.dp,
+        )
+    }
+}
+
+private fun LazyListState.isAtTop(): Boolean =
+    firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset == 0

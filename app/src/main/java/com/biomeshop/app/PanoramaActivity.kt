@@ -19,9 +19,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,7 +38,6 @@ import com.biomeshop.app.data.BiomeItem
 import com.biomeshop.app.data.PanoramaSpec
 import com.biomeshop.app.ui.theme.BiomeShopTheme
 import com.biomeshop.app.ui.theme.Night
-import com.biomeshop.app.ui.theme.TextMuted
 import java.io.File
 import java.io.FileInputStream
 import android.net.Uri
@@ -135,22 +134,28 @@ private fun PanoramaRoute(
                     }
                     if (isSyncing) {
                         item {
-                            Text(
-                                text = "Syncing 360 files in the background.",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = TextMuted,
-                            )
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CompactLoadingIndicator()
+                            }
                         }
                     }
                     item {
-                        PanoramaWebView(
-                            title = item.name,
-                            panorama = panoramaSpec!!,
-                            panoramaUrl = panoramaUrl,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(520.dp),
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            PanoramaWebView(
+                                title = item.name,
+                                panorama = panoramaSpec!!,
+                                panoramaUrl = panoramaUrl,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(520.dp),
+                            )
+                        }
                     }
                 }
                 else -> {

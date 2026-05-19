@@ -43,3 +43,13 @@ Additional CI fix:
 - The cleanup pass also removed a few imports that `MainActivity.kt` still needed for the existing hero card and button UI.
 - Restored `Brush`, `NightDeep`, and `TextButton` imports after CI reported unresolved references.
 - Rechecked all touched route files for the same class of issue before pushing again.
+
+2026-05-19 UI follow-up
+
+Refresh interaction and polish:
+- Replaced the manual `Refresh catalog` settings button with a pull-down-to-refresh gesture at the very top of the home feed.
+- Added a custom top pull indicator so refresh behaves more like a chat app feed refresh.
+- Updated the settings copy to explain that refresh now comes from the home screen pull gesture.
+- Replaced the panorama "syncing" text with a simpler circular loading indicator.
+- Rotated the hero description through three short lines on a timed transition.
+- Added an owner label under the biome stats and softened the home menu button appearance.
