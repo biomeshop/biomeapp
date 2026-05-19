@@ -61,3 +61,10 @@ GitHub Actions compile fix:
 - Cause: the shared route top bar was rewritten to import and use `Modifier.weight`, but this project's current Compose/compiler setup in CI does not expose that import as a safe public API in this context.
 - Fix: removed the `weight` import and rebuilt `RouteTopBar` as a `Box` layout with the title padded away from the trailing close button.
 - Compatibility note for future AI work: avoid introducing `Modifier.weight` into shared route helpers unless the exact Compose version and import behavior are confirmed locally or in CI. Prefer simpler `Box` or fixed-spacing layouts in shared files when compatibility is uncertain.
+
+2026-05-19 asset follow-up
+
+Launcher icon update:
+- Replaced the adaptive launcher icon art with the supplied `icon.png` mushroom asset.
+- Added the image as `res/drawable-nodpi/ic_launcher_art.png` and pointed the adaptive icon background drawable at it.
+- Made the adaptive foreground transparent so the supplied artwork renders directly as the app icon on Android 8+ launchers.
