@@ -97,19 +97,43 @@ internal fun RouteTopBar(
 }
 
 @Composable
-internal fun OfflinePill(text: String) {
+internal fun StatusPill(
+    text: String,
+    backgroundColor: Color,
+    foregroundColor: Color,
+    cornerRadius: Dp = 18.dp,
+) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(StatusSold.copy(alpha = 0.24f))
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(backgroundColor)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
         Text(
             text = text,
-            color = StatusSold,
+            color = foregroundColor,
             style = MaterialTheme.typography.labelLarge,
         )
     }
+}
+
+@Composable
+internal fun OfflinePill(text: String) {
+    StatusPill(
+        text = text,
+        backgroundColor = StatusSold.copy(alpha = 0.24f),
+        foregroundColor = StatusSold,
+    )
+}
+
+@Composable
+internal fun DownloadStatusPill(text: String) {
+    StatusPill(
+        text = text,
+        backgroundColor = Color(0x332B8CFF),
+        foregroundColor = Color(0xFFE4DFF7),
+        cornerRadius = 26.dp,
+    )
 }
 
 @Composable
@@ -205,7 +229,7 @@ internal fun StatusChip(status: Availability) {
 
 @Composable
 internal fun AssetPlaceholder(
-    label: String,
+    label: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -213,8 +237,10 @@ internal fun AssetPlaceholder(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        OfflinePill(text = label)
-        Spacer(modifier = Modifier.height(18.dp))
+        if (!label.isNullOrBlank()) {
+            OfflinePill(text = label)
+            Spacer(modifier = Modifier.height(18.dp))
+        }
         SkeletonImage(
             modifier = Modifier
                 .fillMaxWidth()

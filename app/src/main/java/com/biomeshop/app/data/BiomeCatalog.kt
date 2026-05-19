@@ -80,7 +80,7 @@ object BiomeCatalogDefaults {
     const val siteBaseUrl = "https://biomeshop.github.io/home/"
     const val remoteVersionUrl = "${siteBaseUrl}data/biome-version.json"
     const val remoteCatalogUrl = "${siteBaseUrl}data/biome.json"
-    const val ownerName = "BiomeShop"
+    const val ownerName = "orcMaster"
 
     private val defaultBiomeOptions = listOf(
         FilterOption("all", "All biomes"),

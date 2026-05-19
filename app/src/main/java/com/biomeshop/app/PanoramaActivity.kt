@@ -107,6 +107,7 @@ private fun PanoramaRoute(
     }
 
     val canRenderPanorama = panoramaSpec != null && (hasLocalPanorama || (isOnline && panoramaUrl.isNotBlank()))
+    val showDownloadStatus = isSyncing && isOnline && hasRemotePanorama
     val placeholderLabel = assetStatusLabel(
         isOnline = isOnline,
         hasLocalAsset = hasLocalPanorama,
@@ -132,13 +133,13 @@ private fun PanoramaRoute(
                             OfflinePill(text = "Currently offline")
                         }
                     }
-                    if (isSyncing) {
+                    if (showDownloadStatus) {
                         item {
                             Box(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                CompactLoadingIndicator()
+                                DownloadStatusPill(text = "Downloading panorama...")
                             }
                         }
                     }
@@ -159,9 +160,21 @@ private fun PanoramaRoute(
                     }
                 }
                 else -> {
+                    if (showDownloadStatus) {
+                        item {
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                DownloadStatusPill(text = "Downloading panorama...")
+                            }
+                        }
+                    }
                     item {
                         AssetPlaceholder(
-                            label = placeholderLabel.ifBlank { "Loading 360 view" },
+                            label = placeholderLabel
+                                .takeUnless { showDownloadStatus || it == "Loading content" }
+                                ?.ifBlank { null },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(520.dp),

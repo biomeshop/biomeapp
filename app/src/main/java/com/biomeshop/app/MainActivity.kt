@@ -547,7 +547,10 @@ private fun HeroCard(
                         color = AccentPink,
                     )
                     Text(
-                        text = catalog.ownerName.ifBlank { "orcMaster" },
+                        text = catalog.ownerName
+                            .takeUnless { it.equals("BiomeShop", ignoreCase = true) }
+                            ?.ifBlank { "orcMaster" }
+                            ?: "orcMaster",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onBackground,
                     )
@@ -876,9 +879,9 @@ private fun SettingsScreen(
         ) {
             RouteTopBar(title = "Settings", onClose = onDismiss)
             Text(
-                text = "Pull down from the very top of the home feed to refresh the catalog. This still does not force every biome image to download again.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextMuted,
+                text = "Files and storage",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
             )
             OutlinedButton(onClick = onClearCache, modifier = Modifier.fillMaxWidth()) {
                 Text("Clear cache")
