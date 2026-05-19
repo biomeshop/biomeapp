@@ -36,3 +36,10 @@ CI compile fix:
 - That created conflicting overloads for `OfflinePill`, `SkeletonImage`, `TypeChipRow`, `RemoteBiomeImage`, `PriceText`, `StatusChip`, and `rememberConnectivityState`.
 - Fix: removed the stale duplicated helpers and old modal-only screens from `MainActivity.kt`, then updated settings to use the shared route helpers.
 - Also removed the problematic direct `weight` usage in `PanoramaActivity.kt` and switched the panorama layout to a simpler `LazyColumn` plus fixed-height viewer block for better compatibility with the current Compose setup in CI.
+
+2026-05-19 second follow-up
+
+Additional CI fix:
+- The cleanup pass also removed a few imports that `MainActivity.kt` still needed for the existing hero card and button UI.
+- Restored `Brush`, `NightDeep`, and `TextButton` imports after CI reported unresolved references.
+- Rechecked all touched route files for the same class of issue before pushing again.

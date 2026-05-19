@@ -52,6 +52,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -85,6 +87,7 @@ import com.biomeshop.app.ui.theme.AccentGold
 import com.biomeshop.app.ui.theme.AccentPink
 import com.biomeshop.app.ui.theme.BiomeShopTheme
 import com.biomeshop.app.ui.theme.Night
+import com.biomeshop.app.ui.theme.NightDeep
 import com.biomeshop.app.ui.theme.StatusLive
 import com.biomeshop.app.ui.theme.StatusSold
 import com.biomeshop.app.ui.theme.TextMuted
