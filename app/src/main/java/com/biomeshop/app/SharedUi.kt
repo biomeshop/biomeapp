@@ -84,7 +84,12 @@ internal fun RouteTopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TextButton(onClick = onBack) {
-            Text("\u2190")
+            Text(
+                text = "\u2190",
+                color = Color.White,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
         Text(
             text = title,
