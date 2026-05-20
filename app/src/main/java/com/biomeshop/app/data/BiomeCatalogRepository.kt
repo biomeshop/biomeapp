@@ -86,6 +86,10 @@ class BiomeCatalogRepository(
         }
     }
 
+    suspend fun loadItem(itemId: String, forceRefresh: Boolean = false): BiomeItem? {
+        return loadCatalog(forceRefresh = forceRefresh).catalog.items.firstOrNull { it.id == itemId }
+    }
+
     private fun fetchVersion(): BiomeVersionData {
         val request = Request.Builder()
             .url(BiomeCatalogDefaults.remoteVersionUrl)

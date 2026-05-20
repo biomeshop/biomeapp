@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -74,25 +76,23 @@ internal fun FullScreenSurface(
 @Composable
 internal fun RouteTopBar(
     title: String,
-    onClose: () -> Unit,
+    onBack: () -> Unit,
 ) {
-    Box(
+    Row(
         modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        TextButton(onClick = onBack) {
+            Text("\u2190")
+        }
         Text(
             text = title,
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(end = 88.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
-        TextButton(
-            onClick = onClose,
-            modifier = Modifier.align(Alignment.CenterEnd),
-        ) {
-            Text("Close")
-        }
     }
 }
 

@@ -100,3 +100,12 @@ Latest-build download fix:
 - Root cause: the workflow built fresh APKs and uploaded artifacts/releases, but it never wrote the latest built APK back to `downloads/biomeshop-latest.apk` in the repository.
 - Fix: updated the `main` workflow to copy the newly built APK into `downloads/biomeshop-latest.apk` and push that file back to the repo after a successful build.
 - Added a guard so bot-authored APK refresh commits do not recurse into another full build loop.
+
+2026-05-20 route refresh follow-up
+
+Route header and asset refresh fix:
+- Replaced the `Close` route button with a left-arrow back button beside the route title for details, gallery, panorama, and settings.
+- Found that gallery and panorama routes could reopen with stale in-memory `BiomeItem` data from the offline fallback catalog, even after internet came back.
+- Root cause: those routes were checking and downloading files only from the item payload passed by the home screen, so they could miss newer remote gallery/panorama metadata until a full catalog refresh happened elsewhere.
+- Fix: gallery and panorama now re-resolve the latest item metadata by biome id when online before inspecting local files or preparing downloads.
+- Result: opening gallery or panorama now rechecks both the local cache and the freshest available catalog metadata, so missing files can download as soon as internet is available instead of staying stuck on `Gallery files unavailable` or similar fallback states.

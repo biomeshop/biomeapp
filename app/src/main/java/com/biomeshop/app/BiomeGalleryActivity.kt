@@ -28,6 +28,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.biomeshop.app.data.BiomeAssetRepository
+import com.biomeshop.app.data.BiomeCatalogRepository
 import com.biomeshop.app.data.BiomeItem
 import com.biomeshop.app.ui.theme.BiomeShopTheme
 import com.biomeshop.app.ui.theme.Night
@@ -70,27 +71,40 @@ private fun BiomeGalleryRoute(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val assetRepository = remember(context) { BiomeAssetRepository(context.applicationContext) }
+    val catalogRepository = remember(context) { BiomeCatalogRepository(context.applicationContext) }
     val isOnline = rememberConnectivityState()
 
-    var images by remember { mutableStateOf(item.galleryImages.map { it.url }) }
+    var routeItem by remember { mutableStateOf(item) }
+    var images by remember { mutableStateOf(emptyList<String>()) }
     var hasLocalImages by remember { mutableStateOf(false) }
     var hasRemoteImages by remember { mutableStateOf(item.galleryImages.isNotEmpty()) }
     var isSyncing by remember { mutableStateOf(true) }
 
     LaunchedEffect(item.id, item.revision, isOnline) {
-        val cache = assetRepository.inspectBiome(item)
-        val initialImages = assetRepository.galleryModels(item, cache)
+        val resolvedItem = if (isOnline) {
+            catalogRepository.loadItem(
+                itemId = item.id,
+                forceRefresh = routeItem.galleryImages.isEmpty(),
+            ) ?: routeItem
+        } else {
+            routeItem
+        }
+
+        routeItem = resolvedItem
+
+        val cache = assetRepository.inspectBiome(resolvedItem)
+        val initialImages = assetRepository.galleryModels(resolvedItem, cache)
         images = initialImages
         hasLocalImages = cache.galleryFiles.isNotEmpty()
-        hasRemoteImages = item.galleryImages.isNotEmpty()
+        hasRemoteImages = resolvedItem.galleryImages.isNotEmpty()
 
         if (!isOnline && !hasLocalImages) {
             isSyncing = false
             return@LaunchedEffect
         }
 
-        val prepared = assetRepository.prepareBiomeAssets(item)
-        val refreshedImages = assetRepository.galleryModels(item, prepared.cache)
+        val prepared = assetRepository.prepareBiomeAssets(resolvedItem)
+        val refreshedImages = assetRepository.galleryModels(resolvedItem, prepared.cache)
         images = refreshedImages
         hasLocalImages = prepared.cache.galleryFiles.isNotEmpty()
         isSyncing = false
@@ -112,7 +126,7 @@ private fun BiomeGalleryRoute(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                RouteTopBar(title = item.name, onClose = onClose)
+                RouteTopBar(title = routeItem.name, onBack = onClose)
             }
             if (showPlaceholder) {
                 item {
@@ -139,7 +153,7 @@ private fun BiomeGalleryRoute(
                 items(images) { image ->
                     AsyncImage(
                         model = image,
-                        contentDescription = item.name,
+                        contentDescription = routeItem.name,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxWidth()

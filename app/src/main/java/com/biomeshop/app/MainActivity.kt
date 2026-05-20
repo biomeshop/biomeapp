@@ -877,7 +877,7 @@ private fun SettingsScreen(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            RouteTopBar(title = "Settings", onClose = onDismiss)
+            RouteTopBar(title = "Settings", onBack = onDismiss)
             Text(
                 text = "Files and storage",
                 style = MaterialTheme.typography.titleMedium,

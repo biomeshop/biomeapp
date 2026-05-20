@@ -108,7 +108,7 @@ private fun BiomeDetailRoute(
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             item {
-                RouteTopBar(title = item.name, onClose = onClose)
+                RouteTopBar(title = item.name, onBack = onClose)
             }
             item {
                 Box(

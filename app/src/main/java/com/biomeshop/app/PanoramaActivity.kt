@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import com.biomeshop.app.data.BiomeAssetRepository
+import com.biomeshop.app.data.BiomeCatalogRepository
 import com.biomeshop.app.data.BiomeItem
 import com.biomeshop.app.data.PanoramaSpec
 import com.biomeshop.app.ui.theme.BiomeShopTheme
@@ -80,8 +81,10 @@ private fun PanoramaRoute(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val assetRepository = remember(context) { BiomeAssetRepository(context.applicationContext) }
+    val catalogRepository = remember(context) { BiomeCatalogRepository(context.applicationContext) }
     val isOnline = rememberConnectivityState()
 
+    var routeItem by remember { mutableStateOf(item) }
     var panoramaSpec by remember { mutableStateOf(item.panorama) }
     var panoramaUrl by remember { mutableStateOf(item.panoramaImageUrl) }
     var hasLocalPanorama by remember { mutableStateOf(false) }
@@ -89,19 +92,30 @@ private fun PanoramaRoute(
     var isSyncing by remember { mutableStateOf(true) }
 
     LaunchedEffect(item.id, item.revision, isOnline) {
-        val initialCache = assetRepository.inspectBiome(item)
-        panoramaSpec = item.panorama
-        panoramaUrl = assetRepository.panoramaUrl(item, initialCache)
-        hasLocalPanorama = initialCache.panoramaFile != null
-        hasRemotePanorama = item.panorama != null && item.panoramaImageUrl.isNotBlank()
+        val resolvedItem = if (isOnline) {
+            catalogRepository.loadItem(
+                itemId = item.id,
+                forceRefresh = routeItem.panorama == null || routeItem.panoramaImageUrl.isBlank(),
+            ) ?: routeItem
+        } else {
+            routeItem
+        }
 
-        if (item.panorama == null || (!isOnline && !hasLocalPanorama)) {
+        routeItem = resolvedItem
+
+        val initialCache = assetRepository.inspectBiome(resolvedItem)
+        panoramaSpec = resolvedItem.panorama
+        panoramaUrl = assetRepository.panoramaUrl(resolvedItem, initialCache)
+        hasLocalPanorama = initialCache.panoramaFile != null
+        hasRemotePanorama = resolvedItem.panorama != null && resolvedItem.panoramaImageUrl.isNotBlank()
+
+        if (resolvedItem.panorama == null || (!isOnline && !hasLocalPanorama)) {
             isSyncing = false
             return@LaunchedEffect
         }
 
-        val prepared = assetRepository.prepareBiomeAssets(item)
-        panoramaUrl = assetRepository.panoramaUrl(item, prepared.cache)
+        val prepared = assetRepository.prepareBiomeAssets(resolvedItem)
+        panoramaUrl = assetRepository.panoramaUrl(resolvedItem, prepared.cache)
         hasLocalPanorama = prepared.cache.panoramaFile != null
         isSyncing = false
     }
@@ -123,7 +137,7 @@ private fun PanoramaRoute(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                RouteTopBar(title = item.name, onClose = onClose)
+                RouteTopBar(title = routeItem.name, onBack = onClose)
             }
 
             when {
@@ -149,7 +163,7 @@ private fun PanoramaRoute(
                             contentAlignment = Alignment.Center,
                         ) {
                             PanoramaWebView(
-                                title = item.name,
+                                title = routeItem.name,
                                 panorama = panoramaSpec!!,
                                 panoramaUrl = panoramaUrl,
                                 modifier = Modifier
